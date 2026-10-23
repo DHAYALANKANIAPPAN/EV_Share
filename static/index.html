@@ -24,8 +24,8 @@ body{font-family:Geist,system-ui,sans-serif;line-height:1.55}
 .ibtn{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:8px;border:1px solid transparent;position:relative;color:rgb(var(--mute));transition:color .15s,border-color .15s}
 .ibtn:hover{color:rgb(var(--ink));border-color:rgb(var(--line))}
 [data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;top:calc(100% + 4px);right:0;white-space:nowrap;background:rgb(var(--ink));color:rgb(var(--canvas));font-size:12px;padding:4px 8px;border-radius:6px;z-index:60}
-.field{display:grid;gap:4px;font-size:14px;font-weight:500}.field input,.field select{min-height:44px;border:1px solid rgb(var(--line));border-radius:8px;background:rgb(var(--canvas));padding:0 12px;font-weight:400;color:rgb(var(--ink));width:100%}
-.field input:hover,.field select:hover{border-color:rgb(var(--mute))}
+.field{display:grid;gap:4px;font-size:14px;font-weight:500}.field textarea{padding:8px 12px;min-height:88px}.field input,.field select,.field textarea{min-height:44px;border:1px solid rgb(var(--line));border-radius:8px;background:rgb(var(--canvas));padding:0 12px;font-weight:400;color:rgb(var(--ink));width:100%}
+.field input:hover,.field select:hover,.field textarea:hover{border-color:rgb(var(--mute))}
 .row{display:grid;grid-template-columns:1fr auto;gap:8px 16px;padding:16px;border-top:1px solid rgb(var(--line));transition:background-color .15s}
 .row:first-child{border-top:0}.row:hover,.row[data-on="true"]{background:rgb(var(--canvas))}
 .drawer{position:fixed;inset:0 0 0 auto;width:min(440px,100%);background:rgb(var(--panel));border-left:1px solid rgb(var(--line));z-index:40;transform:translateX(100%);opacity:0;transition:transform .2s cubic-bezier(.16,1,.3,1),opacity .2s;visibility:hidden}
@@ -42,7 +42,7 @@ dialog{border:1px solid rgb(var(--line));border-radius:12px;background:rgb(var(-
 <header class="border-b border-line bg-panel sticky top-0 z-20">
   <div class="mx-auto max-w-7xl px-4 h-16 flex items-center gap-2">
     <a href="/" class="flex items-center gap-2 font-semibold text-lg mr-4"><i data-lucide="zap" class="size-5 text-accent"></i>EV Share</a>
-    <nav id="nav" class="flex gap-1 flex-1" aria-label="Main"></nav>
+    <nav id="nav" class="flex gap-1 flex-1 overflow-x-auto" aria-label="Main"></nav>
     <div id="user" class="flex items-center gap-1"></div>
   </div>
 </header>

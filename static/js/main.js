@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
 
-const S = { user: null, view: "find", chargers: [], bookings: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
+const S = { user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 const filtered = () => S.f.connector || S.f.power || S.f.price;
@@ -11,19 +11,20 @@ const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.availa
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
-  nav.replaceChildren(tab("find", "Find chargers"), tab("bookings", "My bookings"));
+  nav.replaceChildren(tab("find", "Find chargers"), tab("bookings", "My bookings"), tab("chargers", "My chargers"), tab("share", "Share a charger"));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(themeBtn, S.user
     ? h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: S.user.name })
     : null, S.user
-    ? h("button", { className: "btn", textContent: "Sign out", onclick: () => { api.signOut(); S.user = null; S.bookings = []; go("find"); toast("Signed out"); } })
+    ? h("button", { className: "btn", textContent: "Sign out", onclick: () => { api.signOut(); S.user = null; S.bookings = []; S.mine = []; go("find"); toast("Signed out"); } })
     : h("button", { className: "btn btn-primary", textContent: "Sign in", onclick: openAuth }));
   refreshIcons();
 }
 async function go(view) {
-  if (view === "bookings" && !S.user) return openAuth();
+  if (view !== "find" && !S.user) return openAuth();
   S.view = view; renderChrome(); render();
   if (view === "bookings") await guard(loadBookings)();
+  if (view === "chargers") await guard(loadMine)();
 }
 
 /* ---------- find: list + map ---------- */
@@ -45,7 +46,8 @@ function chargerRow(c) {
   return h("li", { className: "row", dataset: { on: String(S.on === c.id), id: c.id }, onmouseenter: () => hl(c.id), onmouseleave: () => hl(null) },
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
-    h("button", { className: "btn btn-primary self-center", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve"));
+    h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
+      h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve")));
 }
 function hl(id) {
   S.on = id;
@@ -96,11 +98,82 @@ function bookingsView() {
     return h("li", { className: "row" }, h("div", { className: "grid gap-1" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
       h("p", { className: "text-sm flex items-center gap-1 " + (cancelled ? "text-danger" : unpaid ? "text-mute" : "text-accent") }, icon(cancelled ? "x-circle" : unpaid ? "clock" : "check-circle-2", "size-4"), h("span", { textContent: cancelled ? "Cancelled" : unpaid ? "Awaiting payment" : "Paid and confirmed" }))),
-      h("div", { className: "flex gap-2 items-center flex-wrap" }, unpaid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete"); await loadBookings(); }) }) : null,
+      h("div", { className: "flex gap-2 items-center flex-wrap" }, !cancelled && !live && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
+        unpaid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete"); await loadBookings(); }) }) : null,
         live ? h("button", { className: "btn btn-danger", textContent: "Cancel booking", onclick: guard(async () => {
           if (!(await confirmDialog({ title: `Cancel booking at '${b.charger_title}'?`, body: "A paid booking is refunded in full. This frees the slot for other drivers.", confirm: "Cancel booking", keep: "Keep booking" }))) return;
           await api.cancel(b.id); toast("Booking cancelled"); await loadBookings(); }) }) : null));
   })));
+}
+
+/* ---------- reviews ---------- */
+const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+function info(title, ...body) {
+  const d = $("#dlg"), opener = document.activeElement, close = h("button", { className: "btn", type: "button", textContent: "Close", onclick: () => d.close() });
+  d.onclose = () => opener && opener.focus && opener.focus();
+  d.replaceChildren(h("h2", { className: "font-semibold text-lg mb-4", textContent: title }), ...body, h("div", { className: "flex justify-end mt-6" }, close)); d.showModal(); close.focus();
+}
+async function openReviews(c) {
+  const list = await api.reviews(c.id);
+  info(`Reviews for '${c.title}'`, h("ul", { className: "panel overflow-hidden max-h-[50vh] overflow-y-auto" }, list.map((r) => h("li", { className: "row", style: "grid-template-columns:1fr" },
+    h("p", { className: "text-sm flex justify-between gap-2" }, h("span", { className: "font-medium", textContent: r.user_name }), h("span", { className: "text-accent", textContent: stars(r.rating), "aria-label": `${r.rating} out of 5` })),
+    r.comment ? h("p", { className: "text-sm", textContent: r.comment }) : null))));
+}
+function openReviewForm(b) {
+  const d = $("#dlg"), opener = document.activeElement;
+  const rate = h("select", { id: "rv-rate" }, [5, 4, 3, 2, 1].map((n) => h("option", { value: n, textContent: `${n} of 5` })));
+  const note = h("textarea", { id: "rv-note", maxLength: 1000 });
+  d.onclose = () => opener && opener.focus && opener.focus();
+  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => { e.preventDefault(); await api.review(b.id, +rate.value, note.value); d.close(); toast("Review posted"); await loadBookings(); }) },
+    h("h2", { className: "font-semibold text-lg", textContent: `Review '${b.charger_title}'` }),
+    h("div", { className: "field" }, h("label", { htmlFor: "rv-rate", textContent: "Rating" }), rate), h("div", { className: "field" }, h("label", { htmlFor: "rv-note", textContent: "Comment (optional)" }), note),
+    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Discard", onclick: () => d.close() }), h("button", { className: "btn btn-primary", type: "submit", textContent: "Post review" }))));
+  d.showModal(); rate.focus();
+}
+
+/* ---------- owner: my chargers ---------- */
+async function loadMine() { S.loading = true; render(); try { S.mine = await api.myChargers(); } finally { S.loading = false; render(); } }
+function mineView() {
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "My chargers" }), h("p", { className: "text-mute mt-1", textContent: "Pause a listing to stop new bookings, or see who has reserved it." }));
+  if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
+  if (!S.mine.length) return h("div", { className: "grid gap-6" }, head, h("section", { className: "panel p-8 grid gap-2 justify-items-start" }, icon("plug", "size-6 text-mute"),
+    h("h2", { className: "font-semibold text-lg", textContent: "You haven't shared a charger yet" }), h("p", { className: "text-sm text-mute", textContent: "List your home or workplace charger so nearby drivers can reserve it." }), h("button", { className: "btn btn-primary mt-2", textContent: "Share a charger", onclick: () => go("share") })));
+  return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.mine.map((c) => h("li", { className: "row" },
+    h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.connector_type.replace("_", " ")}, ${c.power_kw} kW, ${money(c.price_per_kwh)}/kWh. ${windowText(c)}` }),
+      h("p", { className: "text-sm flex items-center gap-1 " + (c.is_active ? "text-accent" : "text-mute") }, icon(c.is_active ? "check-circle-2" : "pause-circle", "size-4"), h("span", { textContent: c.is_active ? "Listed" : "Paused" }))),
+    h("div", { className: "flex gap-2 items-center flex-wrap" }, h("button", { className: "btn", textContent: "View bookings", onclick: guard(() => openOwnerBookings(c)) }),
+      h("button", { className: "btn", textContent: c.is_active ? "Pause listing" : "Resume listing", onclick: guard(async () => { await api.setActive(c.id, !c.is_active); toast(c.is_active ? "Listing paused" : "Listing resumed"); await loadMine(); }) }))))));
+}
+async function openOwnerBookings(c) {
+  const list = await api.chargerBookings(c.id);
+  info(`Bookings for '${c.title}'`, list.length ? h("ul", { className: "panel overflow-hidden max-h-[50vh] overflow-y-auto" }, list.map((b) => h("li", { className: "row", style: "grid-template-columns:1fr" },
+    h("p", { className: "text-sm font-medium", textContent: fmtRange(b.start_time, b.end_time) }), h("p", { className: "text-sm text-mute", textContent: `${b.status === "CANCELLED" ? "Cancelled" : b.payment_status === "PAID" ? "Paid" : "Awaiting payment"}, ${money(b.estimated_cost)}` }))))
+    : h("p", { className: "text-sm text-mute", textContent: "No one has reserved this charger yet." }));
+}
+
+/* ---------- owner: share a charger (form page) ---------- */
+function shareView() {
+  const f = (id, t, el, hint) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el, hint ? h("p", { className: "text-xs text-mute font-normal", textContent: hint }) : null);
+  const inp = (id, o = {}) => h("input", { id, required: true, ...o });
+  const title = inp("s-title", { maxLength: 120 }), addr = inp("s-addr", { maxLength: 255 }), lat = inp("s-lat", { type: "number", step: "any", min: -90, max: 90 }), lon = inp("s-lon", { type: "number", step: "any", min: -180, max: 180 });
+  const conn = h("select", { id: "s-conn" }, CONNECTORS.map((c) => h("option", { value: c, textContent: c.replace("_", " ") })));
+  const kw = inp("s-kw", { type: "number", step: "any", min: 0.1, max: 350 }), price = inp("s-price", { type: "number", step: "any", min: 0 });
+  const limit = h("input", { id: "s-limit", type: "checkbox", className: "size-5", onchange: () => (hours.hidden = !limit.checked) });
+  const from = inp("s-from", { type: "time", value: "18:00" }), to = inp("s-to", { type: "time", value: "08:00" }), tz = inp("s-tz", { value: "Asia/Kolkata" });
+  const hours = h("div", { className: "grid gap-4 sm:grid-cols-3", hidden: true }, f("s-from", "Open from", from), f("s-to", "Open until", to), f("s-tz", "Timezone", tz, "If 'from' is later than 'until', the window runs overnight."));
+  const locate = h("button", { className: "btn", type: "button", textContent: "Use my location", onclick: guard(async () => { const p = await new Promise((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(ok, () => no(new Error("We couldn't read your location. Allow location access or enter coordinates."))) : no(new Error("This browser can't share your location. Enter coordinates instead."))); lat.value = p.coords.latitude.toFixed(6); lon.value = p.coords.longitude.toFixed(6); }) });
+  const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "List charger" });
+  return h("div", { className: "grid gap-6 max-w-2xl" }, h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Share a charger" }), h("p", { className: "text-mute mt-1", textContent: "Add the details drivers need to find and reserve your charger." })),
+    h("form", { className: "panel p-6 grid gap-4", onsubmit: guard(async (e) => {
+      e.preventDefault(); submit.disabled = true;
+      const body = { title: title.value, address: addr.value, latitude: +lat.value, longitude: +lon.value, connector_type: conn.value, power_kw: +kw.value, price_per_kwh: +price.value };
+      if (limit.checked) Object.assign(body, { available_from: from.value, available_to: to.value, timezone: tz.value });
+      try { await api.createCharger(body); toast("Charger listed"); go("chargers"); } finally { submit.disabled = false; } }) },
+      f("s-title", "Title", title), f("s-addr", "Address", addr),
+      h("div", { className: "grid gap-4 sm:grid-cols-[1fr_1fr_auto] items-end" }, f("s-lat", "Latitude", lat), f("s-lon", "Longitude", lon), locate),
+      h("div", { className: "grid gap-4 sm:grid-cols-3" }, f("s-conn", "Connector", conn), f("s-kw", "Power (kW)", kw), f("s-price", "Price per kWh (₹)", price)),
+      h("label", { className: "flex items-center gap-3 text-sm font-medium min-h-11" }, limit, "Only available during certain hours"), hours,
+      h("div", { className: "flex justify-end" }, submit)));
 }
 
 /* ---------- reserve slide-over ---------- */
@@ -144,7 +217,7 @@ function openAuth() {
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.replaceChildren(S.view === "find" ? findView() : bookingsView()); refreshIcons(); }
+function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView }[S.view]()); refreshIcons(); }
 (async function init() {
   if (api.hasSession()) { try { S.user = await api.me(); } catch { api.signOut(); } }
   renderChrome(); await guard(loadChargers)();
