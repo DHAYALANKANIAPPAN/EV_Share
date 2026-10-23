@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EV Share</title>
+<style>
+  :root { --bg:#f6f8f7; --card:#fff; --text:#16231d; --muted:#5d6b64; --accent:#15803d; --line:#dde5e0; --err:#b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1512; --card:#16211b; --text:#e6efe9; --muted:#93a39a; --accent:#4ade80; --line:#26352d; --err:#f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { margin:0; font-size:1.25rem; } h1 span { color:var(--accent); }
+  main { max-width:900px; margin:0 auto; padding:20px; display:grid; gap:20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h2 { margin:0 0 12px; font-size:1rem; }
+  form, .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
+  label { display:grid; gap:2px; font-size:.8rem; color:var(--muted); }
+  input, select, button { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
+  button { background:var(--accent); color:#fff; border:0; cursor:pointer; } button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  @media (prefers-color-scheme: dark) { button { color:#06200f; } }
+  .charger { border-top:1px solid var(--line); padding:12px 0; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .charger:first-child { border-top:0; } .meta { color:var(--muted); font-size:.85rem; }
+  #msg { min-height:1.4em; font-size:.9rem; } #msg.err { color:var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ EV <span>Share</span></h1>
+  <div id="auth-box"></div>
+</header>
+<main>
+  <section id="login-sec">
+    <h2>Sign in or register</h2>
+    <form id="auth-form">
+      <label>Name (register only)<input id="name"></label>
+      <label>Email<input id="email" type="email" required></label>
+      <label>Password<input id="password" type="password" minlength="8" required></label>
+      <button type="submit">Sign in</button>
+      <button type="button" class="ghost" id="register">Register</button>
+    </form>
+  </section>
+
+  <div id="msg"></div>
+
+  <section>
+    <h2>Find a charger</h2>
+    <form id="search-form">
+      <label>Latitude<input id="lat" type="number" step="any" placeholder="10.79"></label>
+      <label>Longitude<input id="lon" type="number" step="any" placeholder="78.70"></label>
+      <label>Radius (km)<input id="radius" type="number" value="10" min="1"></label>
+      <label>Connector
+        <select id="connector"><option value="">Any</option><option>TYPE2</option><option>CCS2</option><option>CHADEMO</option><option>BHARAT_AC001</option><option>BHARAT_DC001</option><option>GBT</option></select>
+      </label>
+      <button type="submit">Search</button>
+    </form>
+    <div id="results"></div>
+  </section>
+
+  <section id="add-sec" hidden>
+    <h2>Share your charger</h2>
+    <form id="add-form">
+      <label>Title<input name="title" required></label>
+      <label>Address<input name="address" required></label>
+      <label>Lat<input name="latitude" type="number" step="any" required></label>
+      <label>Lon<input name="longitude" type="number" step="any" required></label>
+      <label>Connector<select name="connector_type"><option>TYPE2</option><option>CCS2</option><option>CHADEMO</option><option>BHARAT_AC001</option><option>BHARAT_DC001</option><option>GBT</option></select></label>
+      <label>Power (kW)<input name="power_kw" type="number" step="any" min="0.1" required></label>
+      <label>Price / kWh<input name="price_per_kwh" type="number" step="any" min="0" required></label>
+      <button type="submit">Add charger</button>
+    </form>
+  </section>
+
+  <section id="book-sec" hidden>
+    <h2>My bookings</h2>
+    <div id="bookings"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
