@@ -52,9 +52,26 @@ function chargerRow(c) {
 function hl(id) {
   S.on = id;
   document.querySelectorAll("[data-id]").forEach((n) => (n.dataset.on = String(Number(n.dataset.id) === id)));
-  document.querySelectorAll(".pin").forEach((n) => (n.dataset.on = String(Number(n.dataset.id) === id)));
+  document.querySelectorAll(".pin,.evpin").forEach((n) => (n.dataset.on = String(Number(n.dataset.id) === id)));
 }
-function mapPanel() {
+const tiles = () => L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" });
+const pinIcon = (id, on) => L.divIcon({ className: "", html: `<div class="evpin" data-id="${id ?? ""}" data-on="${!!on}"></div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+function mapPanel() { return window.L ? streetMap() : svgMap(); }
+function streetMap() {
+  const box = h("div", { className: "panel overflow-hidden isolate lg:sticky lg:top-24 h-[320px] lg:h-[calc(100vh-8rem)]", role: "region", "aria-label": "Map of chargers" });
+  requestAnimationFrame(() => {
+    if (!box.isConnected) return;
+    const map = L.map(box); tiles().addTo(map); const pts = [];
+    S.chargers.forEach((c) => {
+      L.marker([c.latitude, c.longitude], { title: c.title, icon: pinIcon(c.id) }).addTo(map)
+        .on("click", () => { hl(c.id); document.querySelector(`li[data-id="${c.id}"]`)?.scrollIntoView({ block: "nearest" }); });
+      pts.push([c.latitude, c.longitude]);
+    });
+    pts.length === 1 ? map.setView(pts[0], 14) : map.fitBounds(pts, { padding: [32, 32], maxZoom: 14 });
+  });
+  return box;
+}
+function svgMap() {
   const cs = S.chargers, W = 100;
   const la = cs.map((c) => c.latitude), lo = cs.map((c) => c.longitude);
   const [a0, a1, o0, o1] = [Math.min(...la), Math.max(...la), Math.min(...lo), Math.max(...lo)];
@@ -163,6 +180,20 @@ function shareView() {
   const hours = h("div", { className: "grid gap-4 sm:grid-cols-3", hidden: true }, f("s-from", "Open from", from), f("s-to", "Open until", to), f("s-tz", "Timezone", tz, "If 'from' is later than 'until', the window runs overnight."));
   const locate = h("button", { className: "btn", type: "button", textContent: "Use my location", onclick: guard(async () => { const p = await new Promise((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(ok, () => no(new Error("We couldn't read your location. Allow location access or enter coordinates."))) : no(new Error("This browser can't share your location. Enter coordinates instead."))); lat.value = p.coords.latitude.toFixed(6); lon.value = p.coords.longitude.toFixed(6); }) });
   const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "List charger" });
+  const mapBox = h("div", { className: "panel overflow-hidden isolate h-64", hidden: !window.L, role: "region", "aria-label": "Map. Click to place your charger." });
+  let map, mk;
+  const setPt = (pan) => {
+    const a = parseFloat(lat.value), o = parseFloat(lon.value); if (!map || isNaN(a) || isNaN(o)) return;
+    mk ? mk.setLatLng([a, o]) : (mk = L.marker([a, o], { icon: pinIcon(null, true) }).addTo(map));
+    if (pan) map.setView([a, o], Math.max(map.getZoom(), 15));
+  };
+  lat.onchange = lon.onchange = () => setPt(true);
+  locate.addEventListener("click", () => setTimeout(() => setPt(true), 1500));
+  requestAnimationFrame(() => {
+    if (!window.L || !mapBox.isConnected) return;
+    map = L.map(mapBox).setView([20.59, 78.96], 5); tiles().addTo(map);
+    map.on("click", (e) => { lat.value = e.latlng.lat.toFixed(6); lon.value = e.latlng.lng.toFixed(6); setPt(false); });
+  });
   return h("div", { className: "grid gap-6 max-w-2xl" }, h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Share a charger" }), h("p", { className: "text-mute mt-1", textContent: "Add the details drivers need to find and reserve your charger." })),
     h("form", { className: "panel p-6 grid gap-4", onsubmit: guard(async (e) => {
       e.preventDefault(); submit.disabled = true;
@@ -171,6 +202,7 @@ function shareView() {
       try { await api.createCharger(body); toast("Charger listed"); go("chargers"); } finally { submit.disabled = false; } }) },
       f("s-title", "Title", title), f("s-addr", "Address", addr),
       h("div", { className: "grid gap-4 sm:grid-cols-[1fr_1fr_auto] items-end" }, f("s-lat", "Latitude", lat), f("s-lon", "Longitude", lon), locate),
+      mapBox, window.L ? h("p", { className: "text-xs text-mute -mt-2", textContent: "Click the map to place your charger, or use your location." }) : null,
       h("div", { className: "grid gap-4 sm:grid-cols-3" }, f("s-conn", "Connector", conn), f("s-kw", "Power (kW)", kw), f("s-price", "Price per kWh (₹)", price)),
       h("label", { className: "flex items-center gap-3 text-sm font-medium min-h-11" }, limit, "Only available during certain hours"), hours,
       h("div", { className: "flex justify-end" }, submit)));
