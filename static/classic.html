@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EV Share · share and find EV chargers</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">⚡ EV <span>Share</span></div>
+  <nav id="nav" aria-label="Main">
+    <button data-view="find" class="active">Find</button>
+    <button data-view="bookings" data-auth>My bookings</button>
+    <button data-view="chargers" data-auth>My chargers</button>
+    <button data-view="share" data-auth>Share a charger</button>
+  </nav>
+  <div id="user-box"></div>
+</header>
+
+<main>
+  <!-- FIND -->
+  <section id="view-find" class="view find-layout">
+    <aside class="panel">
+      <div class="filters">
+        <div class="row">
+          <button id="btn-locate" class="btn">📍 Use my location</button>
+          <button id="btn-area" class="btn ghost">Search this map area</button>
+        </div>
+        <div class="row grid4">
+          <label>Radius<select id="f-radius"><option>2</option><option selected>5</option><option>10</option><option>25</option><option>50</option></select></label>
+          <label>Connector
+            <select id="f-connector"><option value="">Any</option><option>TYPE2</option><option>CCS2</option><option>CHADEMO</option><option>BHARAT_AC001</option><option>BHARAT_DC001</option><option>GBT</option></select>
+          </label>
+          <label>Min kW<input id="f-power" type="number" min="1" step="any" placeholder="any"></label>
+          <label>Max ₹/kWh<input id="f-price" type="number" min="0" step="any" placeholder="any"></label>
+        </div>
+        <div class="row">
+          <label>Min rating
+            <select id="f-rating"><option value="">Any</option><option value="3">3★ +</option><option value="4">4★ +</option><option value="4.5">4.5★ +</option></select>
+          </label>
+          <button id="btn-all" class="btn ghost">Show all chargers</button>
+        </div>
+      </div>
+      <div id="result-count" class="muted small"></div>
+      <div id="results" class="list"></div>
+    </aside>
+    <div id="map-find" class="map" aria-label="Map of chargers"></div>
+  </section>
+
+  <!-- BOOKINGS -->
+  <section id="view-bookings" class="view page" hidden>
+    <h2>My bookings</h2>
+    <div id="bookings" class="list"></div>
+  </section>
+
+  <!-- MY CHARGERS -->
+  <section id="view-chargers" class="view page" hidden>
+    <h2>My chargers</h2>
+    <div id="my-chargers" class="list"></div>
+  </section>
+
+  <!-- SHARE -->
+  <section id="view-share" class="view page" hidden>
+    <h2>Share a charger</h2>
+    <p class="muted">Click the map to drop a pin where your charger is, or use your current location.</p>
+    <div class="share-layout">
+      <form id="add-form" class="stack">
+        <label>Title<input name="title" required maxlength="120" placeholder="Home charger, Anna Nagar"></label>
+        <label>Address<input name="address" required maxlength="255"></label>
+        <div class="row grid2">
+          <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required></label>
+          <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required></label>
+        </div>
+        <div class="row grid3">
+          <label>Connector
+            <select name="connector_type"><option>TYPE2</option><option>CCS2</option><option>CHADEMO</option><option>BHARAT_AC001</option><option>BHARAT_DC001</option><option>GBT</option></select>
+          </label>
+          <label>Power (kW)<input name="power_kw" type="number" step="any" min="0.1" max="350" required></label>
+          <label>Price per kWh (₹)<input name="price_per_kwh" type="number" step="any" min="0" required></label>
+        </div>
+        <label class="check"><input type="checkbox" id="limit-hours"> Only available during certain hours</label>
+        <div class="row grid3" id="hours-box" hidden>
+          <label>From<input name="available_from" type="time" value="18:00"></label>
+          <label>To<input name="available_to" type="time" value="08:00"></label>
+          <label>Timezone<input name="timezone" list="tzlist" value="Asia/Kolkata"></label>
+        </div>
+        <datalist id="tzlist"><option>Asia/Kolkata</option><option>UTC</option><option>Asia/Dubai</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option><option>America/Los_Angeles</option><option>Australia/Sydney</option></datalist>
+        <p class="muted small" id="hours-hint" hidden>If “From” is later than “To”, the window runs overnight (for example 18:00 → 08:00).</p>
+        <div class="row"><button type="submit" class="btn">Add charger</button><button type="button" id="btn-pick-locate" class="btn ghost">📍 Use my location</button></div>
+      </form>
+      <div id="map-pick" class="map"></div>
+    </div>
+  </section>
+</main>
+
+<!-- DIALOGS -->
+<dialog id="dlg-auth">
+  <form method="dialog" class="stack" id="auth-form">
+    <div class="tabs"><button type="button" data-mode="login" class="active">Sign in</button><button type="button" data-mode="register">Register</button></div>
+    <label id="name-wrap" hidden>Name<input id="a-name" autocomplete="name"></label>
+    <label>Email<input id="a-email" type="email" required autocomplete="email"></label>
+    <label>Password<input id="a-pass" type="password" minlength="8" required autocomplete="current-password"></label>
+    <div class="row end"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn" id="a-submit">Sign in</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-book">
+  <form method="dialog" class="stack" id="book-form">
+    <h3 id="b-title"></h3>
+    <p class="muted small" id="b-info"></p>
+    <label>Start<input id="b-start" type="datetime-local" required></label>
+    <label>End<input id="b-end" type="datetime-local" required></label>
+    <div class="estimate" id="b-estimate"></div>
+    <p class="muted small">Estimate assumes the charger runs at full power for the whole slot. Times are in your local timezone.</p>
+    <div class="row end"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn">Book &amp; pay</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-reviews">
+  <div class="stack"><h3 id="r-title"></h3><div id="r-list" class="list"></div>
+  <div class="row end"><button class="btn ghost" data-close>Close</button></div></div>
+</dialog>
+
+<dialog id="dlg-review">
+  <form method="dialog" class="stack" id="review-form">
+    <h3>Rate your charge</h3>
+    <div class="star-input" id="star-input"></div>
+    <label>Comment (optional)<textarea id="rv-comment" maxlength="1000" rows="3"></textarea></label>
+    <div class="row end"><button type="button" class="btn ghost" data-close>Cancel</button><button type="submit" class="btn">Submit review</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-owner">
+  <div class="stack"><h3 id="o-title"></h3><div id="o-list" class="list"></div>
+  <div class="row end"><button class="btn ghost" data-close>Close</button></div></div>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

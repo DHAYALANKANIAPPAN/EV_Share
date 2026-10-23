@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
 .env
 *.db
 .pytest_cache/
+*.zip

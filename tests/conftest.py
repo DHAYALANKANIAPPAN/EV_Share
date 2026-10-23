@@ -1,9 +1,14 @@
 import os
 
-os.environ["EVSHARE_DATABASE_URL"] = "sqlite://"  # in-memory, set before the app imports
+os.environ["EVSHARE_ENV"] = "dev"
+os.environ["EVSHARE_SECRET_KEY"] = "test-secret-key-that-is-definitely-long-enough-123"
+os.environ["EVSHARE_DATABASE_URL"] = "sqlite://"
+os.environ["EVSHARE_PAYMENT_PROVIDER"] = "mock"
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import database
@@ -12,9 +17,6 @@ from app.main import app
 
 @pytest.fixture()
 def client():
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     database.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -28,6 +30,7 @@ def client():
 
     app.dependency_overrides[database.get_db] = override
     with TestClient(app) as c:
+        c.session_factory = Session  # lets tests insert fixtures (e.g. past bookings) directly
         yield c
     app.dependency_overrides.clear()
 
