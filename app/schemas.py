@@ -123,6 +123,7 @@ class BookingOut(ORM):
     charger_title: str
     payment_status: str
     reviewed: bool
+    hold_expires_at: datetime | None = None
 
 
 # ---- reviews ----

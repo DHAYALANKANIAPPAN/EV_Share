@@ -7,7 +7,7 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 - **Map search**: Leaflet + OpenStreetMap, "use my location", search by radius, connector, power, price and rating
 - **Accounts**: register / login (JWT bearer tokens, PBKDF2-hashed passwords)
 - **Chargers**: list, edit, pause; optional daily **availability window** with timezone (overnight windows like 18:00 → 08:00 supported)
-- **Bookings**: conflict-free slots (back-to-back allowed), future-only, max 8 h, no self-booking, cancel by driver or owner
+- **Bookings**: unpaid bookings are released after 15 min (`EVSHARE_UNPAID_HOLD_MINUTES`), conflict-free slots (back-to-back allowed), future-only, max 8 h, no self-booking, cancel by driver or owner
 - **Payments**: `mock` provider for development, `razorpay` provider (Orders API + signature verification); paid bookings are refunded on cancellation
 - **Reviews**: 1–5 stars + comment, only for your own ended, non-cancelled bookings; average rating shown in search
 - **Migrations**: Alembic; SQLite by default, Postgres supported
@@ -86,7 +86,6 @@ tests/          pytest suite (in-memory SQLite)
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
 - **No owner payouts yet**: payments are collected on your gateway account; splitting money to hosts is not built.
-- **Unpaid bookings still hold their slot**; there is no expiry for abandoned payments.
 - Razorpay support follows the documented API but has only been tested with mocked HTTP. Test with Razorpay test keys before going live.
 - The page loads Leaflet from cdnjs and map tiles from OpenStreetMap; the JWT is kept in `localStorage`.
 

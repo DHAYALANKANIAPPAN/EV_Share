@@ -201,3 +201,44 @@ def test_production_requires_strong_secret_and_real_payments():
         Settings(env="production", secret_key="x" * 40, payment_provider="razorpay")
     Settings(env="production", secret_key="x" * 40, payment_provider="razorpay",
              razorpay_key_id="a", razorpay_key_secret="b")
+
+
+# ---------- unpaid booking expiry ----------
+def test_unpaid_booking_expires_and_frees_slot(client):
+    from datetime import timedelta as td
+    owner, driver = register_and_login(client), register_and_login(client, "b@example.com", "Bala")
+    other = register_and_login(client, "c@example.com", "Chitra")
+    cid = client.post("/chargers", json=CHARGER, headers=owner).json()["id"]
+    s, e = future()
+    unpaid = client.post("/bookings", json={"charger_id": cid, "start_time": iso(s), "end_time": iso(e)}, headers=driver).json()
+    assert unpaid["hold_expires_at"] is not None
+
+    # fresh unpaid booking still holds the slot
+    assert client.post("/bookings", json={"charger_id": cid, "start_time": iso(s), "end_time": iso(e)}, headers=other).status_code == 409
+
+    with client.session_factory() as db:  # age it past the hold window
+        b = db.get(Booking, unpaid["id"])
+        b.created_at -= td(minutes=30)
+        db.commit()
+    mine = client.get("/bookings/mine", headers=driver).json()
+    assert mine[0]["status"] == "CANCELLED" and mine[0]["hold_expires_at"] is None
+    assert client.post("/payments/checkout", json={"booking_id": unpaid["id"]}, headers=driver).status_code == 400
+    assert client.post("/bookings", json={"charger_id": cid, "start_time": iso(s), "end_time": iso(e)}, headers=other).status_code == 201
+
+
+def test_paid_and_free_bookings_never_expire(client):
+    from datetime import timedelta as td
+    owner, driver = register_and_login(client), register_and_login(client, "b@example.com", "Bala")
+    paid_c = client.post("/chargers", json=CHARGER, headers=owner).json()["id"]
+    free_c = client.post("/chargers", json={**CHARGER, "price_per_kwh": 0}, headers=owner).json()["id"]
+    s, e = future()
+    paid = client.post("/bookings", json={"charger_id": paid_c, "start_time": iso(s), "end_time": iso(e)}, headers=driver).json()["id"]
+    free = client.post("/bookings", json={"charger_id": free_c, "start_time": iso(s), "end_time": iso(e)}, headers=driver).json()["id"]
+    client.post("/payments/checkout", json={"booking_id": paid}, headers=driver)
+    client.post("/payments/confirm", json={"booking_id": paid}, headers=driver)
+    with client.session_factory() as db:
+        for bid in (paid, free):
+            db.get(Booking, bid).created_at -= td(hours=2)
+        db.commit()
+    statuses = {b["id"]: b["status"] for b in client.get("/bookings/mine", headers=driver).json()}
+    assert statuses == {paid: "CONFIRMED", free: "CONFIRMED"}

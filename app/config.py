@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./evshare.db"
     access_token_minutes: int = 60
     max_booking_hours: int = 8
+    unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
     default_timezone: str = "Asia/Kolkata"
 
     # payments: "mock" (no money moves, for development) or "razorpay"

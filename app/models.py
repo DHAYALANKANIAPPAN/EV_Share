@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import (Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, Time,
                         UniqueConstraint)
@@ -88,6 +88,14 @@ class Booking(Base):
     @property
     def payment_status(self) -> str:
         return self.payment.status.value if self.payment else "UNPAID"
+
+    @property
+    def hold_expires_at(self) -> datetime | None:
+        """When an unpaid booking will be released; None once paid, free or cancelled."""
+        if (self.status != BookingStatus.CONFIRMED or self.estimated_cost <= 0 or settings.unpaid_hold_minutes <= 0
+                or (self.payment and self.payment.status == PaymentStatus.PAID)):
+            return None
+        return self.created_at + timedelta(minutes=settings.unpaid_hold_minutes)
 
     @property
     def charger_title(self) -> str:

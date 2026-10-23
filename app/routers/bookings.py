@@ -8,6 +8,7 @@ from ..deps import DB, CurrentUser
 from ..models import Booking, BookingStatus, Charger, PaymentStatus, utcnow
 from ..schemas import BookingCreate, BookingOut
 from ..services.availability import fits_window, window_label
+from ..services.expiry import expire_unpaid
 from ..services.payments import get_provider
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -23,6 +24,7 @@ def create_booking(body: BookingCreate, db: DB, user: CurrentUser):
     if duration > timedelta(hours=settings.max_booking_hours):
         raise HTTPException(422, f"A booking can be at most {settings.max_booking_hours} hours")
 
+    expire_unpaid(db)
     charger = db.get(Charger, body.charger_id)
     if not charger or not charger.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Charger not found or not available")
@@ -54,12 +56,14 @@ def create_booking(body: BookingCreate, db: DB, user: CurrentUser):
 
 @router.get("/mine", response_model=list[BookingOut])
 def my_bookings(db: DB, user: CurrentUser):
+    expire_unpaid(db)
     return db.scalars(select(Booking).where(Booking.user_id == user.id).order_by(Booking.start_time.desc())).all()
 
 
 @router.get("/charger/{charger_id}", response_model=list[BookingOut])
 def charger_bookings(charger_id: int, db: DB, user: CurrentUser):
     """Bookings on a charger. Only visible to its owner."""
+    expire_unpaid(db)
     charger = db.get(Charger, charger_id)
     if not charger:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Charger not found")

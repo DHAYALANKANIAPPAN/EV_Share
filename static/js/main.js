@@ -114,7 +114,7 @@ function bookingsView() {
     const cancelled = b.status === "CANCELLED", live = !cancelled && utc(b.end_time) > now, unpaid = !cancelled && b.payment_status !== "PAID";
     return h("li", { className: "row" }, h("div", { className: "grid gap-1" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
-      h("p", { className: "text-sm flex items-center gap-1 " + (cancelled ? "text-danger" : unpaid ? "text-mute" : "text-accent") }, icon(cancelled ? "x-circle" : unpaid ? "clock" : "check-circle-2", "size-4"), h("span", { textContent: cancelled ? "Cancelled" : unpaid ? "Awaiting payment" : "Paid and confirmed" }))),
+      h("p", { className: "text-sm flex items-center gap-1 " + (cancelled ? "text-danger" : unpaid ? "text-mute" : "text-accent") }, icon(cancelled ? "x-circle" : unpaid ? "clock" : "check-circle-2", "size-4"), h("span", { textContent: cancelled ? "Cancelled" : unpaid ? `Awaiting payment${b.hold_expires_at ? `. Pay by ${utc(b.hold_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} or the slot is released` : ""}` : "Paid and confirmed" }))),
       h("div", { className: "flex gap-2 items-center flex-wrap" }, !cancelled && !live && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
         unpaid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete"); await loadBookings(); }) }) : null,
         live ? h("button", { className: "btn btn-danger", textContent: "Cancel booking", onclick: guard(async () => {

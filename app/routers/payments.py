@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from ..deps import DB, CurrentUser
 from ..models import Booking, BookingStatus, Payment, PaymentStatus
 from ..schemas import BookingOut, CheckoutOut, CheckoutRequest, ConfirmRequest
+from ..services.expiry import expire_unpaid
 from ..services.payments import get_provider
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -10,11 +11,12 @@ CURRENCY = "INR"
 
 
 def _own_booking(db, booking_id: int, user) -> Booking:
+    expire_unpaid(db)
     booking = db.get(Booking, booking_id)
     if not booking or booking.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
     if booking.status != BookingStatus.CONFIRMED:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Booking is cancelled")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This booking was cancelled or its payment window ended. Reserve the slot again.")
     return booking
 
 
