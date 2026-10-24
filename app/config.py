@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./evshare.db"
     access_token_minutes: int = 60
     max_booking_hours: int = 8
+    login_max_failures: int = 5  # per (client IP, email) within the window
+    login_window_minutes: int = 15
     unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
     default_timezone: str = "Asia/Kolkata"
 

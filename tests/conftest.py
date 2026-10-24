@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import database
 from app.main import app
+from app.services.ratelimit import login_limiter
 
 
 @pytest.fixture()
@@ -29,6 +30,7 @@ def client():
             db.close()
 
     app.dependency_overrides[database.get_db] = override
+    login_limiter.reset_all()
     with TestClient(app) as c:
         c.session_factory = Session  # lets tests insert fixtures (e.g. past bookings) directly
         yield c
@@ -38,6 +40,7 @@ def client():
 def register_and_login(client, email="a@example.com", name="Asha", password="password123"):
     client.post("/auth/register", json={"email": email, "name": name, "password": password})
     r = client.post("/auth/login", data={"username": email, "password": password})
+    client.cookies.clear()  # tests authenticate explicitly with Bearer headers
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 

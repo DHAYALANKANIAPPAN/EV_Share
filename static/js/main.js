@@ -16,7 +16,7 @@ function renderChrome() {
   user.replaceChildren(themeBtn, S.user
     ? h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: S.user.name })
     : null, S.user
-    ? h("button", { className: "btn", textContent: "Sign out", onclick: () => { api.signOut(); S.user = null; S.bookings = []; S.mine = []; go("find"); toast("Signed out"); } })
+    ? h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; go("find"); toast("Signed out"); } })
     : h("button", { className: "btn btn-primary", textContent: "Sign in", onclick: openAuth }));
   refreshIcons();
 }
@@ -252,6 +252,6 @@ function openAuth() {
 /* ---------- boot ---------- */
 function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView }[S.view]()); refreshIcons(); }
 (async function init() {
-  if (api.hasSession()) { try { S.user = await api.me(); } catch { api.signOut(); } }
+  try { S.user = await api.me(); } catch { /* not signed in */ }
   renderChrome(); await guard(loadChargers)();
 })();

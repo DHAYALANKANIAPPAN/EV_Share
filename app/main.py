@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (register tables)
+from .config import settings
 from .routers import auth, bookings, chargers, payments, reviews
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -13,6 +14,18 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app = FastAPI(title="EV Share", description="Peer-to-peer EV charger sharing.", version="0.2.0")
 for r in (auth, chargers, bookings, reviews, payments):
     app.include_router(r.router)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "geolocation=(self)")
+    if settings.env != "dev":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
 
 
 @app.get("/health", tags=["meta"])

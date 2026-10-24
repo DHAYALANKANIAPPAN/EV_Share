@@ -9,6 +9,7 @@ from .config import settings
 
 _ITERATIONS = 240_000
 _ALGO = "HS256"
+COOKIE_NAME = "evshare_session"
 
 
 def hash_password(password: str) -> str:

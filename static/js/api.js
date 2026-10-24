@@ -5,9 +5,8 @@ function loadRazorpay() {
     s.onload = ok; s.onerror = () => no(new Error("Couldn't load the payment window. Check your connection and try again.")); document.head.append(s);
   });
 }
-let token = localStorage.getItem("evshare_token");
 async function call(path, { method = "GET", body, form } = {}) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers = { "X-Requested-With": "evshare" };  // the session cookie is HttpOnly; this header blocks cross-site forms
   if (body) headers["Content-Type"] = "application/json";
   const res = await fetch(path, { method, headers, body: form ? new URLSearchParams(form) : body && JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
@@ -18,11 +17,10 @@ async function call(path, { method = "GET", body, form } = {}) {
   return data;
 }
 export const api = {
-  hasSession: () => !!token,
   me: () => call("/auth/me"),
-  async signIn(email, password) { token = (await call("/auth/login", { method: "POST", form: { username: email, password } })).access_token; localStorage.setItem("evshare_token", token); return call("/auth/me"); },
+  async signIn(email, password) { await call("/auth/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
   async register(name, email, password) { await call("/auth/register", { method: "POST", body: { name, email, password } }); return this.signIn(email, password); },
-  signOut() { token = null; localStorage.removeItem("evshare_token"); },
+  signOut: () => call("/auth/logout", { method: "POST" }).catch(() => {}),
   chargers(f) { const q = new URLSearchParams(); if (f.connector) q.set("connector_type", f.connector); if (f.power) q.set("min_power_kw", f.power); if (f.price) q.set("max_price_per_kwh", f.price); return call(`/chargers?${q}`); },
   createCharger: (body) => call("/chargers", { method: "POST", body }),
   myChargers: () => call("/chargers/mine"),

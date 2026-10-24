@@ -109,6 +109,13 @@ scripts/seed.py demo data
 tests/          pytest suite (in-memory SQLite)
 ```
 
+## Security
+
+- Browser sessions use an **HttpOnly, SameSite=Lax cookie** (`Secure` outside dev); the token is never exposed to page JavaScript. Cookie-authenticated writes also need the `X-Requested-With: evshare` header (CSRF defence). API clients can keep using `Authorization: Bearer`.
+- **Login attempts are limited** per (IP, email): 5 failures in 15 minutes returns 429. The counter lives in memory, so use Redis or a database table if you run several instances.
+- Standard headers are set on every response (`nosniff`, `X-Frame-Options: DENY`, referrer and permissions policies, HSTS outside dev).
+- Not done yet: email verification and password reset (they need an email provider), a Content-Security-Policy (the page currently loads Tailwind from a CDN), registration throttling.
+
 ## Known limitations
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
