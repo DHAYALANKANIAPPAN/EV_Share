@@ -242,3 +242,9 @@ def test_paid_and_free_bookings_never_expire(client):
         db.commit()
     statuses = {b["id"]: b["status"] for b in client.get("/bookings/mine", headers=driver).json()}
     assert statuses == {paid: "CONFIRMED", free: "CONFIRMED"}
+
+
+def test_postgres_urls_get_an_explicit_driver():
+    assert Settings(database_url="postgres://u:p@h/db").database_url == "postgresql+psycopg://u:p@h/db"
+    assert Settings(database_url="postgresql://u:p@h/db").database_url == "postgresql+psycopg://u:p@h/db"
+    assert Settings(database_url="sqlite:///./x.db").database_url == "sqlite:///./x.db"

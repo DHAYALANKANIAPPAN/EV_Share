@@ -10,7 +10,7 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 - **Bookings**: unpaid bookings are released after 15 min (`EVSHARE_UNPAID_HOLD_MINUTES`), conflict-free slots (back-to-back allowed), future-only, max 8 h, no self-booking, cancel by driver or owner
 - **Payments**: `mock` provider for development, `razorpay` provider (Orders API + signature verification); paid bookings are refunded on cancellation
 - **Reviews**: 1–5 stars + comment, only for your own ended, non-cancelled bookings; average rating shown in search
-- **Migrations**: Alembic; SQLite by default, Postgres supported
+- **Migrations**: Alembic; SQLite by default; Postgres tested (migrations and a full booking/payment flow)
 
 ## Quick start
 
@@ -56,6 +56,27 @@ pip install -r requirements-postgres.txt
 # in .env: EVSHARE_DATABASE_URL=postgresql+psycopg://evshare:evshare@localhost:5432/evshare
 alembic upgrade head
 ```
+
+### Deploying
+
+The repo ships a `Dockerfile` (runs `alembic upgrade head`, then serves on `$PORT`). On a host such as Render, Railway or Fly.io:
+
+1. Create a managed **Postgres** database.
+2. Create a web service from this repo using the Dockerfile.
+3. Set these environment variables on the service:
+
+| Variable | Value |
+|---|---|
+| `EVSHARE_ENV` | `production` |
+| `EVSHARE_SECRET_KEY` | a random 48+ character string (`python -c "import secrets; print(secrets.token_urlsafe(48))"`) |
+| `EVSHARE_DATABASE_URL` | the database URL from your host (`postgres://...` is accepted) |
+| `EVSHARE_PAYMENT_PROVIDER` | `razorpay` (production refuses the mock provider) |
+| `EVSHARE_RAZORPAY_KEY_ID` / `EVSHARE_RAZORPAY_KEY_SECRET` | start with **test-mode** keys |
+
+4. Deploy and open `/health` to confirm it responds. Do **not** run `scripts.seed` in production.
+
+HTTPS is provided by the host. Keep secrets in the host's environment settings, never in the repo.
+The Docker image itself has not been built in this project's development environment, so expect to fix small things on the first deploy.
 
 ### Changing the schema
 

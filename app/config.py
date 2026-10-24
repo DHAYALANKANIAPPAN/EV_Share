@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate(self):
+        # Hosting platforms hand out `postgres://...`; SQLAlchemy needs an explicit driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if self.database_url.startswith(prefix):
+                self.database_url = "postgresql+psycopg://" + self.database_url[len(prefix):]
         if not self.secret_key:  # `EVSHARE_SECRET_KEY=` left blank in .env
             self.secret_key = DEV_SECRET
         if self.env != "dev" and (self.secret_key == DEV_SECRET or len(self.secret_key) < 32):
