@@ -1,3 +1,10 @@
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((ok, no) => {
+    const s = document.createElement("script"); s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = ok; s.onerror = () => no(new Error("Couldn't load the payment window. Check your connection and try again.")); document.head.append(s);
+  });
+}
 let token = localStorage.getItem("evshare_token");
 async function call(path, { method = "GET", body, form } = {}) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -29,7 +36,18 @@ export const api = {
   async pay(id) {
     const co = await call("/payments/checkout", { method: "POST", body: { booking_id: id } });
     if (co.status === "PAID") return;
-    if (co.provider !== "mock") throw new Error("Card payments open in the classic view at /classic. Pay there to finish.");
-    await call("/payments/confirm", { method: "POST", body: { booking_id: id } });
+    const confirm = (extra = {}) => call("/payments/confirm", { method: "POST", body: { booking_id: id, ...extra } });
+    if (co.provider === "mock") return void (await confirm());
+    await loadRazorpay();
+    await new Promise((resolve, reject) => {
+      const rz = new window.Razorpay({
+        key: co.key_id, order_id: co.order_id, amount: Math.round(co.amount * 100), currency: co.currency,
+        name: "EV Share", description: `Booking #${id}`, theme: { color: "#047857" },
+        handler: (r) => confirm({ payment_id: r.razorpay_payment_id, signature: r.razorpay_signature }).then(resolve, reject),
+        modal: { ondismiss: () => reject(new Error("Payment window closed. You can finish paying from My bookings before the hold ends.")) },
+      });
+      rz.on("payment.failed", (r) => reject(new Error((r.error && r.error.description) || "The payment didn't go through. Try again or use another method.")));
+      rz.open();
+    });
   },
 };

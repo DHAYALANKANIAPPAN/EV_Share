@@ -42,6 +42,12 @@ Run the tests with `pytest`.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | – | Use Razorpay **test-mode** keys first |
 | `DEFAULT_TIMEZONE` | `Asia/Kolkata` | Default for new chargers |
 
+### Razorpay
+
+1. Create a Razorpay account and copy your **test-mode** key id and secret from the dashboard.
+2. In `.env`: `EVSHARE_PAYMENT_PROVIDER=razorpay`, `EVSHARE_RAZORPAY_KEY_ID=...`, `EVSHARE_RAZORPAY_KEY_SECRET=...` (never commit `.env`).
+3. Restart the app. "Reserve and pay" and "Pay now" open Razorpay's checkout; use Razorpay's test cards/UPI from their docs.
+
 ### Postgres
 
 ```bash

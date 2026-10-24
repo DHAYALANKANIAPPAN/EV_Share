@@ -221,7 +221,8 @@ function openDrawer(c) {
   const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "Reserve and pay" });
   const form = h("form", { className: "grid gap-4 p-6", onsubmit: guard(async (e) => {
     e.preventDefault(); submit.disabled = true; submit.textContent = "Reserving…"; submit.setAttribute("aria-busy", "true");
-    try { const b = await api.book(c.id, new Date(start.value).toISOString(), new Date(end.value).toISOString()); await api.pay(b.id).catch((er) => toast(er.message, true)); close(); toast("Booked. See it under My bookings."); }
+    try { const b = await api.book(c.id, new Date(start.value).toISOString(), new Date(end.value).toISOString()); let paid = true; await api.pay(b.id).catch((er) => { paid = false; toast(er.message, true); }); close();
+      toast(paid ? "Booked and paid. See it under My bookings." : "Slot reserved. Finish paying from My bookings before the hold ends."); }
     finally { submit.disabled = false; submit.textContent = "Reserve and pay"; submit.removeAttribute("aria-busy"); } }) },
     h("div", {}, h("h2", { className: "text-xl font-semibold", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.address}. ${c.power_kw} kW, ${money(c.price_per_kwh)}/kWh. ${windowText(c)}.` })),
     h("div", { className: "field" }, h("label", { htmlFor: "d-start", textContent: "Start" }), start), h("div", { className: "field" }, h("label", { htmlFor: "d-end", textContent: "End" }), end), est,
