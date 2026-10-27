@@ -279,11 +279,12 @@ function verifyView() {
     v.role === "DRIVER" ? h("div", { className: "flex gap-2 items-end flex-wrap" }, h("div", { className: "field flex-1 min-w-[200px]" }, h("label", { htmlFor: "v-car", textContent: "Vehicle registration number" }), car),
       h("button", { className: "btn", textContent: "Save number", disabled: locked, onclick: guard(async () => { await api.setVehicle(car.value); toast("Saved"); await loadVerify(); }) })) : null,
     h("p", { className: "text-sm text-mute", textContent: "PDF, JPG or PNG, up to 5 MB each. Files are encrypted and only our reviewers can open them." }), docRows);
-  const consent = h("input", { id: "v-consent", type: "checkbox", className: "size-5", disabled: locked });
+  const consent = h("input", { id: "v-consent", type: "checkbox", className: "size-5", disabled: locked, checked: locked });
   const sendStep = step("Step 4 of 4: Send for review", !docsDone && !locked,
     h("label", { className: "flex items-start gap-3 text-sm min-h-11" }, consent, "I agree that EV Share may store these documents and have a reviewer check them against official records to verify my account."),
-    h("div", {}, h("button", { className: "btn btn-primary", textContent: v.status === "REJECTED" ? "Resubmit for review" : "Submit for review", disabled: !v.can_submit,
-      onclick: guard(async () => { await api.submitVerification(consent.checked); toast("Submitted. A reviewer will check your documents."); await loadVerify(); await refreshUser(); }) })));
+    h("div", {}, h("button", { className: "btn btn-primary", textContent: v.status === "REJECTED" ? "Resubmit for review" : v.status === "PENDING" ? "Submitted. Waiting for review" : v.status === "APPROVED" ? "Approved" : "Submit for review", disabled: !v.can_submit,
+      onclick: guard(async () => { await api.submitVerification(consent.checked); toast("Submitted. A reviewer will check your documents."); await loadVerify(); await refreshUser(); window.scrollTo({ top: 0, behavior: "smooth" }); }) }),
+      v.status === "PENDING" ? h("p", { className: "text-sm text-accent mt-2 flex items-center gap-2" }, icon("check-circle-2", "size-4"), "Your application is with a reviewer. There is nothing more to do right now.") : null));
   return h("div", { className: "grid gap-6 max-w-2xl" }, head, stepper(cur),
     h("div", { className: "panel p-4 grid gap-1" }, h("p", { className: "flex items-center gap-2 font-medium " + cls }, icon(ic, "size-5"), label),
       v.rejection_reason ? h("p", { className: "text-sm", textContent: `Reviewer's note: ${v.rejection_reason}` }) : null,
