@@ -19,7 +19,8 @@ def register(body: UserCreate, db: DB):
     email = body.email.lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
-    user = User(email=email, name=body.name, password_hash=hash_password(body.password))
+    user = User(email=email, name=body.name, password_hash=hash_password(body.password),
+                role=body.role, hub_type=body.hub_type)
     db.add(user)
     db.commit()
     return user

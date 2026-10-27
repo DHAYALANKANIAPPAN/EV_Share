@@ -3,7 +3,7 @@ from datetime import time
 
 from app import models  # noqa: F401
 from app.database import SessionLocal
-from app.models import Charger, ConnectorType, User
+from app.models import Charger, ConnectorType, HubType, Role, User, VerificationStatus
 from app.security import hash_password
 
 # title, address, lat, lon, connector, kW, price/kWh, available_from, available_to
@@ -20,12 +20,16 @@ with SessionLocal() as db:
     if db.query(User).filter_by(email="host@example.com").first():
         print("Seed data already present.")
     else:
-        host = User(email="host@example.com", name="Demo Host", password_hash=hash_password("password123"))
+        host = User(email="host@example.com", name="Demo Host", password_hash=hash_password("password123"), role=Role.HUB,
+                    hub_type=HubType.HOUSE, email_verified=True, verification_status=VerificationStatus.APPROVED)
         db.add(host)
         db.flush()
         for title, addr, lat, lon, conn, kw, price, af, at in DEMO_CHARGERS:
             db.add(Charger(owner_id=host.id, title=title, address=addr, latitude=lat, longitude=lon,
                            connector_type=conn, power_kw=kw, price_per_kwh=price, available_from=af, available_to=at))
-        db.add(User(email="driver@example.com", name="Demo Driver", password_hash=hash_password("password123")))
+        db.add(User(email="driver@example.com", name="Demo Driver", password_hash=hash_password("password123"), role=Role.DRIVER,
+                    email_verified=True, verification_status=VerificationStatus.APPROVED, vehicle_number="TN45AB1234"))
+        db.add(User(email="admin@example.com", name="Demo Reviewer", password_hash=hash_password("password123"), is_admin=True,
+                    email_verified=True, verification_status=VerificationStatus.APPROVED))
         db.commit()
-        print("Seeded: host@example.com / driver@example.com (password: password123)")
+        print("Seeded (password: password123): host@example.com (hub), driver@example.com (driver), admin@example.com (reviewer)")

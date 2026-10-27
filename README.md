@@ -5,6 +5,7 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 ## Features
 
 - **Map search**: Leaflet + OpenStreetMap, "use my location", search by radius, connector, power, price and rating
+- **Verified accounts**: drivers and hubs upload documents, confirm their email with an OTP, and are approved by a reviewer before they can book or list
 - **Accounts**: register / login (JWT bearer tokens, PBKDF2-hashed passwords)
 - **Chargers**: list, edit, pause; optional daily **availability window** with timezone (overnight windows like 18:00 → 08:00 supported)
 - **Bookings**: unpaid bookings are released after 15 min (`EVSHARE_UNPAID_HOLD_MINUTES`), conflict-free slots (back-to-back allowed), future-only, max 8 h, no self-booking, cancel by driver or owner
@@ -71,6 +72,8 @@ The repo ships a `Dockerfile` (runs `alembic upgrade head`, then serves on `$POR
 | `EVSHARE_SECRET_KEY` | a random 48+ character string (`python -c "import secrets; print(secrets.token_urlsafe(48))"`) |
 | `EVSHARE_DATABASE_URL` | the database URL from your host (`postgres://...` is accepted) |
 | `EVSHARE_PAYMENT_PROVIDER` | `razorpay` (production refuses the mock provider) |
+| `EVSHARE_DOCS_ENCRYPTION_KEY` | a Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `EVSHARE_OTP_PROVIDER`, `EVSHARE_SMTP_HOST`, `EVSHARE_SMTP_PORT`, `EVSHARE_SMTP_USER`, `EVSHARE_SMTP_PASSWORD`, `EVSHARE_SMTP_FROM` | `smtp` and your mail service details (production refuses the console provider) |
 | `EVSHARE_RAZORPAY_KEY_ID` / `EVSHARE_RAZORPAY_KEY_SECRET` | start with **test-mode** keys |
 
 4. Deploy and open `/health` to confirm it responds. Do **not** run `scripts.seed` in production.
@@ -109,6 +112,26 @@ scripts/seed.py demo data
 tests/          pytest suite (in-memory SQLite)
 ```
 
+## Account verification
+
+Everyone registers as a **driver** or a **hub** (house or shop) and must be approved before using the marketplace:
+
+| Account | Needs |
+|---|---|
+| Driver | email OTP, vehicle registration number, **masked** Aadhaar, vehicle RC |
+| Hub: house | email OTP, house documents, property tax receipt |
+| Hub: shop | the above plus sanctioned building plan, occupancy certificate, shop & establishment licence |
+
+Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts, single use, resend cooldown), upload documents, agree to the consent statement, submit. A **reviewer** (an account with `is_admin`) opens each document, checks it against the official portals, and approves or asks for changes with a reason. Until approved, drivers cannot book, hubs cannot list, and an unapproved hub's chargers are hidden from search.
+
+- Registration is one guided flow: create account, confirm email, upload documents, then review. The required documents are listed before the user signs up.
+- Make a reviewer: `python -m scripts.make_admin you@example.com` (find emails with `python -m scripts.list_users`). The seed script also creates `admin@example.com`.
+- Re-test the flow with an existing account: `python -m scripts.reset_verification you@example.com`.
+- Files are validated by content (PDF/JPG/PNG, 5 MB), stored under random names and **encrypted at rest** (Fernet). Set `EVSHARE_DOCS_ENCRYPTION_KEY` outside dev. Only reviewers can read them.
+- **Aadhaar:** the app never stores the number. Ask users to upload a masked copy. Rules for private entities handling Aadhaar are strict, so get legal advice before going live.
+- The OTP is emailed (`EVSHARE_OTP_PROVIDER=smtp`); in dev it is printed in the server log. Every sign-up and OTP screen shows a notice that EV Share never asks for OTPs by call, text or email.
+- Existing accounts are treated as approved when you upgrade (migration `0002`); accounts that already own chargers become house hubs.
+
 ## Security
 
 - Browser sessions use an **HttpOnly, SameSite=Lax cookie** (`Secure` outside dev); the token is never exposed to page JavaScript. Cookie-authenticated writes also need the `X-Requested-With: evshare` header (CSRF defence). API clients can keep using `Authorization: Bearer`.
@@ -119,6 +142,8 @@ tests/          pytest suite (in-memory SQLite)
 ## Known limitations
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
+- **Uploaded documents are stored on the server disk.** Most hosts wipe that disk on redeploy, so use a persistent volume or move storage to S3-style object storage before real users. Documents are also never auto-deleted yet; add a retention rule.
+- **Verification is manual.** A person checks each document. Automatic checks need a licensed verification provider.
 - **No owner payouts yet**: payments are collected on your gateway account; splitting money to hosts is not built.
 - Razorpay support follows the documented API but has only been tested with mocked HTTP. Test with Razorpay test keys before going live.
 - The page loads Leaflet from cdnjs and map tiles from OpenStreetMap; the JWT is kept in `localStorage`.

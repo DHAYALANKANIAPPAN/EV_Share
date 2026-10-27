@@ -193,14 +193,14 @@ def test_razorpay_signature_flow(client, monkeypatch):
 
 # ---------- config safety ----------
 def test_production_requires_strong_secret_and_real_payments():
-    with pytest.raises(ValueError):
-        Settings(env="production", secret_key="short")
-    with pytest.raises(ValueError):
-        Settings(env="production", secret_key="x" * 40, payment_provider="mock")
-    with pytest.raises(ValueError):
-        Settings(env="production", secret_key="x" * 40, payment_provider="razorpay")
-    Settings(env="production", secret_key="x" * 40, payment_provider="razorpay",
-             razorpay_key_id="a", razorpay_key_secret="b")
+    from cryptography.fernet import Fernet
+    base = dict(env="production", secret_key="x" * 40, otp_provider="smtp", smtp_host="smtp.example.com", smtp_from="no-reply@example.com",
+                docs_encryption_key=Fernet.generate_key().decode(), payment_provider="razorpay", razorpay_key_id="a", razorpay_key_secret="b")
+    Settings(**base)  # a complete production config is accepted
+    for bad in (dict(secret_key="short"), dict(payment_provider="mock"), dict(razorpay_key_secret=""),
+                dict(otp_provider="console"), dict(smtp_host=""), dict(docs_encryption_key=""), dict(docs_encryption_key="not-a-key")):
+        with pytest.raises(ValueError):
+            Settings(**{**base, **bad})
 
 
 # ---------- unpaid booking expiry ----------

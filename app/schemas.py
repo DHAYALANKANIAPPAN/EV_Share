@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .config import settings
-from .models import BookingStatus, ConnectorType
+from .models import BookingStatus, ConnectorType, DocType, HubType, Role, VerificationStatus
 
 
 class ORM(BaseModel):
@@ -31,12 +31,27 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=8, max_length=128)
+    role: Role = Role.DRIVER
+    hub_type: HubType | None = None
+
+    @model_validator(mode="after")
+    def _hub(self):
+        if self.role == Role.HUB and self.hub_type is None:
+            raise ValueError("hub_type (HOUSE or SHOP) is required for hub accounts")
+        if self.role == Role.DRIVER:
+            self.hub_type = None
+        return self
 
 
 class UserOut(ORM):
     id: int
     email: EmailStr
     name: str
+    role: Role
+    hub_type: HubType | None
+    is_admin: bool
+    email_verified: bool
+    verification_status: VerificationStatus
 
 
 class Token(BaseModel):
@@ -162,3 +177,67 @@ class ConfirmRequest(BaseModel):
     booking_id: int
     payment_id: str = "mock_payment"
     signature: str = "mock_signature"
+
+
+# ---- verification ----
+class RequiredDoc(BaseModel):
+    doc_type: DocType
+    label: str
+    uploaded: bool
+    original_name: str | None = None
+
+
+class VerificationOut(BaseModel):
+    role: Role
+    hub_type: HubType | None
+    status: VerificationStatus
+    rejection_reason: str | None
+    email_verified: bool
+    vehicle_number: str | None
+    required: list[RequiredDoc]
+    can_submit: bool
+
+
+class VehicleIn(BaseModel):
+    vehicle_number: str = Field(min_length=6, max_length=20)
+
+    @field_validator("vehicle_number")
+    @classmethod
+    def _plate(cls, v: str) -> str:
+        import re
+        v = re.sub(r"[\s-]", "", v).upper()
+        if not re.fullmatch(r"[A-Z0-9]{6,12}", v):
+            raise ValueError("enter the registration number using letters and digits, e.g. TN45AB1234")
+        return v
+
+
+class OtpConfirm(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class SubmitIn(BaseModel):
+    consent: bool
+
+
+class DocumentOut(ORM):
+    id: int
+    doc_type: DocType
+    original_name: str
+    size: int
+
+
+class DecisionIn(BaseModel):
+    approve: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class AdminVerificationOut(BaseModel):
+    user_id: int
+    name: str
+    email: EmailStr
+    role: Role
+    hub_type: HubType | None
+    vehicle_number: str | None
+    status: VerificationStatus
+    submitted_at: datetime | None
+    documents: list[DocumentOut]

@@ -43,7 +43,7 @@ def test_booking_rules(client):
     cid = client.post("/chargers", json=CHARGER, headers=owner).json()["id"]
     s, e = slot()
 
-    assert client.post("/bookings", json={"charger_id": cid, "start_time": s, "end_time": e}, headers=owner).status_code == 400
+    assert client.post("/bookings", json={"charger_id": cid, "start_time": s, "end_time": e}, headers=owner).status_code == 403  # hubs cannot book
     ok = client.post("/bookings", json={"charger_id": cid, "start_time": s, "end_time": e}, headers=driver)
     assert ok.status_code == 201 and ok.json()["estimated_cost"] == round(7.4 * 2 * 10, 2)
 

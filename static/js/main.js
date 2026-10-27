@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
 
-const S = { user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
+const S = { vs: null, queue: [], user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 const filtered = () => S.f.connector || S.f.power || S.f.price;
@@ -11,18 +11,24 @@ const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.availa
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
-  nav.replaceChildren(tab("find", "Find chargers"), tab("bookings", "My bookings"), tab("chargers", "My chargers"), tab("share", "Share a charger"));
+  const u = S.user, ok = u && u.verification_status === "APPROVED";
+  nav.replaceChildren(...[tab("find", "Find chargers"),
+    u && u.role === "DRIVER" ? tab("bookings", "My bookings") : null,
+    u && u.role === "HUB" ? tab("chargers", "My chargers") : null, u && u.role === "HUB" ? tab("share", "Share a charger") : null,
+    u && !ok && !u.is_admin ? tab("verify", "Verify account") : null, u && u.is_admin ? tab("review", "Review applications") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
-  user.replaceChildren(themeBtn, S.user
-    ? h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: S.user.name })
-    : null, S.user
-    ? h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; go("find"); toast("Signed out"); } })
-    : h("button", { className: "btn btn-primary", textContent: "Sign in", onclick: openAuth }));
+  user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: S.user.name }),
+      h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); go("find"); toast("Signed out"); } })]
+    : [themeBtn, h("button", { className: "btn", textContent: "Sign in", onclick: openAuth }), h("button", { className: "btn btn-primary", textContent: "Create account", onclick: () => go("register") })]));
   refreshIcons();
 }
-async function go(view) {
-  if (view !== "find" && !S.user) return openAuth();
+async function go(view) {  // eslint-disable-line
+  if (view === "register" && S.user) view = "find";
+  if (view !== "find" && view !== "register" && !S.user) return openAuth();
+  if (view === "share" && S.user.verification_status !== "APPROVED") { toast("Verify your account before sharing a charger.", true); view = "verify"; }
   S.view = view; renderChrome(); render();
+  if (view === "verify") await guard(loadVerify)();
+  if (view === "review") await guard(loadQueue)();
   if (view === "bookings") await guard(loadBookings)();
   if (view === "chargers") await guard(loadMine)();
 }
@@ -208,10 +214,113 @@ function shareView() {
       h("div", { className: "flex justify-end" }, submit)));
 }
 
+/* ---------- account verification ---------- */
+const NOTICE = "EV Share will never call, text or email you to ask for an OTP, password or card details. Enter a code only inside this app, on the screen that asks for it. If anyone asks you to read one out, it is a scam.";
+const noticeBox = () => h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("shield-alert", "size-5 shrink-0 text-accent"), h("p", {}, h("strong", { textContent: "Staying safe. " }), NOTICE));
+async function refreshUser() { S.user = await api.me(); renderChrome(); }
+async function loadVerify() { S.loading = true; render(); try { S.vs = await api.verification(); } finally { S.loading = false; render(); } }
+const STATUS = { NOT_SUBMITTED: ["circle-dashed", "Not submitted yet", "text-mute"], PENDING: ["clock", "Under review. We'll approve or ask for changes soon.", "text-mute"], APPROVED: ["check-circle-2", "Verified. You're all set.", "text-accent"], REJECTED: ["x-circle", "Needs changes", "text-danger"] };
+const STEPS = ["Create account", "Confirm email", "Upload documents", "Review"];
+function stepper(cur) {
+  return h("ol", { className: "flex gap-2 flex-wrap text-sm", "aria-label": "Registration progress" }, STEPS.map((t, i) => {
+    const n = i + 1, done = n < cur, on = n === cur;
+    return h("li", { className: "flex items-center gap-2 px-3 min-h-9 rounded-lg border " + (on ? "border-accent text-accent font-medium" : done ? "border-line text-accent" : "border-line text-mute"), "aria-current": on ? "step" : null },
+      done ? icon("check", "size-4") : h("span", { textContent: String(n) }), t);
+  }));
+}
+const NEEDS = { DRIVER: ["Email OTP (we email you a 6-digit code)", "Vehicle registration number", "Aadhaar card, masked (first 8 digits hidden)", "Vehicle registration certificate (RC)"],
+  HOUSE: ["Email OTP (we email you a 6-digit code)", "House / property documents", "Property tax receipt"],
+  SHOP: ["Email OTP (we email you a 6-digit code)", "House / property documents", "Property tax receipt", "Sanctioned building plan", "Occupancy certificate", "Shop & establishment licence"] };
+function registerView() {
+  const R = (S.reg = S.reg || { name: "", email: "", pass: "", role: "DRIVER", hub: "HOUSE" });
+  const f = (id, t, el, hint) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el, hint ? h("p", { className: "text-xs text-mute font-normal", textContent: hint }) : null);
+  const text = (id, key, o = {}) => h("input", { id, value: R[key], required: true, oninput: (e) => (R[key] = e.target.value), ...o });
+  const sel = (id, opts, key) => h("select", { id, onchange: (e) => { R[key] = e.target.value; render(); } }, opts.map(([v, t]) => h("option", { value: v, textContent: t, selected: v === R[key] })));
+  const need = NEEDS[R.role === "DRIVER" ? "DRIVER" : R.hub];
+  return h("div", { className: "grid gap-6 max-w-xl" },
+    h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Create your account" }),
+      h("p", { className: "text-mute mt-1", textContent: "Everyone is verified before they can book or list a charger. You'll upload your documents right after this step." })),
+    stepper(1), noticeBox(),
+    h("section", { className: "panel p-5 grid gap-3" }, h("h2", { className: "font-semibold", textContent: "I want to" }), f("r-role", "Account type", sel("r-role", [["DRIVER", "Charge my EV (driver)"], ["HUB", "Share a charger (hub)"]], "role")),
+      R.role === "HUB" ? f("r-hub", "My property is a", sel("r-hub", [["HOUSE", "House"], ["SHOP", "Shop or business"]], "hub")) : null,
+      h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
+    h("form", { className: "panel p-5 grid gap-4", onsubmit: guard(async (e) => {
+        e.preventDefault(); S.user = await api.register(R.name, R.email, R.pass, R.role, R.role === "HUB" ? R.hub : undefined); S.reg = null;
+        renderChrome(); toast("Account created. Next, confirm your email."); await go("verify"); }) },
+      h("h2", { className: "font-semibold", textContent: "Your details" }), f("r-name", "Full name", text("r-name", "name", { autocomplete: "name" })),
+      f("r-email", "Email", text("r-email", "email", { type: "email", autocomplete: "email" }), "We'll send your verification code here."),
+      f("r-pass", "Password", text("r-pass", "pass", { type: "password", minLength: 8, autocomplete: "new-password" }), "At least 8 characters."),
+      h("button", { className: "btn btn-primary", type: "submit", textContent: "Create account and continue" }),
+      h("p", { className: "text-sm text-mute" }, "Already registered? ", h("button", { type: "button", className: "underline", textContent: "Sign in", onclick: openAuth }))));
+}
+function verifyView() {
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Finish your registration" }),
+    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: S.user.role === "DRIVER" ? "Drivers verify their identity and vehicle before reserving chargers." : "Hubs verify their property before listing chargers." }));
+  if (S.loading || !S.vs) return h("div", { className: "grid gap-6 max-w-2xl" }, head, skeleton());
+  const v = S.vs, locked = v.status === "PENDING" || v.status === "APPROVED", [ic, label, cls] = STATUS[v.status];
+  const docsDone = v.required.every((r) => r.uploaded) && (v.role !== "DRIVER" || !!v.vehicle_number);
+  const cur = v.status === "APPROVED" ? 5 : locked ? 4 : !v.email_verified ? 2 : !docsDone ? 3 : 4;
+  const step = (title, lock, ...body) => h("section", { className: "panel p-5 grid gap-3 " + (lock ? "opacity-50" : ""), inert: !!lock, "aria-disabled": lock ? "true" : null }, h("h2", { className: "font-semibold", textContent: title }), ...body);
+  const code = h("input", { id: "v-code", inputMode: "numeric", maxLength: 6, autocomplete: "one-time-code", placeholder: "6-digit code" });
+  const emailStep = step("Step 2 of 4: Confirm your email", false, v.email_verified
+    ? h("p", { className: "text-sm flex items-center gap-2 text-accent" }, icon("check-circle-2", "size-4"), `${S.user.email} is confirmed.`)
+    : h("div", { className: "grid gap-3" }, h("p", { className: "text-sm text-mute", textContent: `We'll email a 6-digit code to ${S.user.email}. It expires in 10 minutes.` }),
+        h("div", { className: "flex gap-2 flex-wrap items-end" }, h("button", { className: "btn", textContent: "Email me a code", onclick: guard(async () => { await api.sendCode(); toast("Code sent. Check your inbox."); $("#v-code").focus(); }) }),
+          h("div", { className: "field" }, h("label", { htmlFor: "v-code", textContent: "Enter the code" }), code),
+          h("button", { className: "btn btn-primary", textContent: "Confirm code", onclick: guard(async () => { await api.confirmCode(code.value.trim()); toast("Email confirmed"); await loadVerify(); await refreshUser(); }) }))));
+  const car = h("input", { id: "v-car", value: v.vehicle_number || "", disabled: locked, placeholder: "TN45AB1234", maxLength: 20 });
+  const docRows = h("ul", { className: "panel overflow-hidden" }, v.required.map((r) => h("li", { className: "row" },
+    h("div", { className: "grid gap-1 min-w-0" }, h("p", { className: "font-medium text-sm", textContent: r.label }),
+      h("p", { className: "text-sm flex items-center gap-1 " + (r.uploaded ? "text-accent" : "text-mute") }, icon(r.uploaded ? "check-circle-2" : "circle-dashed", "size-4"), h("span", { className: "truncate", textContent: r.uploaded ? r.original_name : "Not uploaded" }))),
+    h("label", { className: "btn cursor-pointer " + (locked ? "opacity-50 pointer-events-none" : ""), textContent: r.uploaded ? "Replace file" : "Choose file" },
+      h("input", { type: "file", className: "sr-only", accept: ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png", disabled: locked,
+        onchange: guard(async (e) => { const f = e.target.files[0]; if (!f) return; await api.uploadDoc(r.doc_type, f); toast("Uploaded"); await loadVerify(); }) })))));
+  const docsStep = step("Step 3 of 4: Upload your documents", !v.email_verified && !locked,
+    v.role === "DRIVER" ? h("div", { className: "flex gap-2 items-end flex-wrap" }, h("div", { className: "field flex-1 min-w-[200px]" }, h("label", { htmlFor: "v-car", textContent: "Vehicle registration number" }), car),
+      h("button", { className: "btn", textContent: "Save number", disabled: locked, onclick: guard(async () => { await api.setVehicle(car.value); toast("Saved"); await loadVerify(); }) })) : null,
+    h("p", { className: "text-sm text-mute", textContent: "PDF, JPG or PNG, up to 5 MB each. Files are encrypted and only our reviewers can open them." }), docRows);
+  const consent = h("input", { id: "v-consent", type: "checkbox", className: "size-5", disabled: locked });
+  const sendStep = step("Step 4 of 4: Send for review", !docsDone && !locked,
+    h("label", { className: "flex items-start gap-3 text-sm min-h-11" }, consent, "I agree that EV Share may store these documents and have a reviewer check them against official records to verify my account."),
+    h("div", {}, h("button", { className: "btn btn-primary", textContent: v.status === "REJECTED" ? "Resubmit for review" : "Submit for review", disabled: !v.can_submit,
+      onclick: guard(async () => { await api.submitVerification(consent.checked); toast("Submitted. A reviewer will check your documents."); await loadVerify(); await refreshUser(); }) })));
+  return h("div", { className: "grid gap-6 max-w-2xl" }, head, stepper(cur),
+    h("div", { className: "panel p-4 grid gap-1" }, h("p", { className: "flex items-center gap-2 font-medium " + cls }, icon(ic, "size-5"), label),
+      v.rejection_reason ? h("p", { className: "text-sm", textContent: `Reviewer's note: ${v.rejection_reason}` }) : null,
+      v.status === "PENDING" ? h("p", { className: "text-sm text-mute", textContent: "A reviewer is checking each document against the official records. Sign in again later to see the result." }) : null),
+    noticeBox(), emailStep, docsStep, sendStep);
+}
+
+/* ---------- admin: review queue ---------- */
+async function loadQueue() { S.loading = true; render(); try { S.queue = await api.adminQueue(); } finally { S.loading = false; render(); } }
+function reviewView() {
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Review applications" }),
+    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Open each document, check it against the official portal, then approve or ask the applicant to fix it." }));
+  if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
+  if (!S.queue.length) return h("div", { className: "grid gap-6" }, head, h("section", { className: "panel p-8 grid gap-2 justify-items-start" }, icon("inbox", "size-6 text-mute"), h("h2", { className: "font-semibold text-lg", textContent: "No applications waiting" }), h("p", { className: "text-sm text-mute", textContent: "New submissions will show up here." })));
+  return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.queue.map((a) => h("li", { className: "row" },
+    h("div", { className: "grid gap-2 min-w-0" }, h("h3", { className: "font-medium", textContent: `${a.name} (${a.role === "HUB" ? `Hub, ${a.hub_type.toLowerCase()}` : "Driver"})` }),
+      h("p", { className: "text-sm text-mute", textContent: `${a.email}${a.vehicle_number ? `, vehicle ${a.vehicle_number}` : ""}` }),
+      h("ul", { className: "flex gap-2 flex-wrap" }, a.documents.map((d) => h("li", {}, h("a", { className: "btn", href: api.docUrl(d.id), target: "_blank", rel: "noopener noreferrer" }, icon("file-text", "size-4"), d.doc_type.replaceAll("_", " ").toLowerCase()))))),
+    h("div", { className: "flex gap-2 items-center flex-wrap self-start" },
+      h("button", { className: "btn btn-primary", textContent: "Approve", onclick: guard(async () => { await api.adminDecide(a.user_id, true); toast(`${a.name} approved`); await loadQueue(); }) }),
+      h("button", { className: "btn btn-danger", textContent: "Ask for changes", onclick: () => askReason(a) }))))));
+}
+function askReason(a) {
+  const d = $("#dlg"), opener = document.activeElement, why = h("textarea", { id: "why", maxLength: 500, required: true, minLength: 5, placeholder: "e.g. The RC photo is blurry. Please upload a clearer copy." });
+  d.onclose = () => opener && opener.focus && opener.focus();
+  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => { e.preventDefault(); await api.adminDecide(a.user_id, false, why.value); d.close(); toast("Applicant notified in the app"); await loadQueue(); }) },
+    h("h2", { className: "font-semibold text-lg", textContent: `Ask ${a.name} for changes` }), h("div", { className: "field" }, h("label", { htmlFor: "why", textContent: "What should they fix?" }), why),
+    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Cancel", onclick: () => d.close() }), h("button", { className: "btn btn-danger", type: "submit", textContent: "Send feedback" }))));
+  d.showModal(); why.focus();
+}
+
 /* ---------- reserve slide-over ---------- */
 const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 function openDrawer(c) {
   if (!S.user) return openAuth();
+  if (S.user.role !== "DRIVER") return toast("Only driver accounts can reserve chargers.", true);
+  if (S.user.verification_status !== "APPROVED") { toast("Verify your account to reserve chargers.", true); return go("verify"); }
   const opener = document.activeElement, d = $("#drawer"), s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 2);
   const start = h("input", { id: "d-start", type: "datetime-local", required: true, value: local(s) }), end = h("input", { id: "d-end", type: "datetime-local", required: true, value: local(new Date(s.getTime() + 36e5)) });
   const est = h("p", { className: "text-lg font-semibold" }), upd = () => { const hrs = (new Date(end.value) - new Date(start.value)) / 36e5; est.textContent = hrs > 0 ? `Up to ${money(c.power_kw * hrs * c.price_per_kwh)} for ${+hrs.toFixed(1)} h` : ""; };
@@ -232,25 +341,26 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
-/* ---------- auth dialog ---------- */
+/* ---------- sign in ---------- */
 function openAuth() {
-  let register = false; const d = $("#dlg"), opener = document.activeElement;
-  const draw = () => {
-    const name = h("input", { id: "a-name", autocomplete: "name", required: true }), email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", minLength: 8, required: true, autocomplete: register ? "new-password" : "current-password" });
-    const f = (id, t, el, hint) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el, hint ? h("p", { className: "text-xs text-mute font-normal", textContent: hint }) : null);
-    d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => { e.preventDefault(); S.user = register ? await api.register(name.value, email.value, pass.value) : await api.signIn(email.value, pass.value); d.close(); toast(`Welcome, ${S.user.name}`); renderChrome(); if (S.view === "bookings") await loadBookings(); }) },
-      h("h2", { className: "text-xl font-semibold", textContent: register ? "Create your account" : "Sign in to EV Share" }),
-      register ? f("a-name", "Name", name) : null, f("a-email", "Email", email), f("a-pass", "Password", pass, register ? "At least 8 characters." : null),
-      h("button", { className: "btn btn-primary", type: "submit", textContent: register ? "Create account" : "Sign in" }),
-      h("button", { className: "btn border-transparent text-mute", type: "button", textContent: register ? "I have an account. Sign in" : "Create an account", onclick: () => { register = !register; draw(); } }),
-      h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Cancel", onclick: () => d.close() })));
-    $("#a-email").focus();
-  };
-  d.onclose = () => opener && opener.focus && opener.focus(); draw(); d.showModal(); $("#a-email").focus();
+  const d = $("#dlg"), opener = document.activeElement;
+  const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password" });
+  const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
+  d.onclose = () => opener && opener.focus && opener.focus();
+  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome, ${S.user.name}`); renderChrome();
+      if (S.user.is_admin) return go("review");
+      if (S.user.verification_status !== "APPROVED") return go("verify");
+      go(["verify", "review", "register"].includes(S.view) ? "find" : S.view); }) },
+    h("h2", { className: "text-xl font-semibold", textContent: "Sign in to EV Share" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
+    h("button", { className: "btn btn-primary", type: "submit", textContent: "Sign in" }),
+    h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Create an account", onclick: () => { d.close(); go("register"); } }),
+    h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Cancel", onclick: () => d.close() })));
+  d.showModal(); email.focus();
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, review: reviewView, register: registerView }[S.view]()); refreshIcons(); }
 (async function init() {
   try { S.user = await api.me(); } catch { /* not signed in */ }
   renderChrome(); await guard(loadChargers)();

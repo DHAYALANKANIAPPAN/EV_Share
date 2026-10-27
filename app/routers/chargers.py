@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from ..deps import DB, CurrentUser
-from ..models import Charger, ConnectorType, Review
+from ..deps import DB, ApprovedHub, CurrentUser
+from ..models import Charger, ConnectorType, Review, User, VerificationStatus
 from ..schemas import ChargerCreate, ChargerOut, ChargerUpdate, _check_window
 from ..services.geo import bounding_box, haversine_km
 
@@ -36,7 +36,7 @@ def to_out(db, chargers: list[Charger], distances: dict[int, float] | None = Non
 
 
 @router.post("", response_model=ChargerOut, status_code=status.HTTP_201_CREATED)
-def create_charger(body: ChargerCreate, db: DB, user: CurrentUser):
+def create_charger(body: ChargerCreate, db: DB, user: ApprovedHub):
     charger = Charger(owner_id=user.id, **body.model_dump())
     db.add(charger)
     db.commit()
@@ -59,7 +59,8 @@ def search_chargers(
     if (lat is None) != (lon is None):
         raise HTTPException(422, "Provide both lat and lon, or neither")
 
-    stmt = select(Charger).where(Charger.is_active.is_(True))
+    stmt = select(Charger).where(Charger.is_active.is_(True),
+                                 Charger.owner.has(User.verification_status == VerificationStatus.APPROVED))
     if connector_type:
         stmt = stmt.where(Charger.connector_type == connector_type)
     if min_power_kw is not None:

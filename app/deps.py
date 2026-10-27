@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from .models import Role, User, VerificationStatus
 from .security import COOKIE_NAME, decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
@@ -35,3 +35,24 @@ def get_current_user(request: Request, bearer: Annotated[str | None, Depends(oau
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def _require(role: Role):
+    def dep(user: CurrentUser) -> User:
+        if user.role != role:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Only {role.value.lower()} accounts can do this.")
+        if user.verification_status != VerificationStatus.APPROVED:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Your account isn't verified yet. Finish verification to continue.")
+        return user
+    return dep
+
+
+def _admin(user: CurrentUser) -> User:
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins only.")
+    return user
+
+
+ApprovedDriver = Annotated[User, Depends(_require(Role.DRIVER))]
+ApprovedHub = Annotated[User, Depends(_require(Role.HUB))]
+AdminUser = Annotated[User, Depends(_admin)]

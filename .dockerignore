@@ -6,6 +6,7 @@ __pycache__
 *.pyc
 *.db
 *.zip
+uploads
 .env
 .pytest_cache
 tests

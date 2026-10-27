@@ -34,6 +34,37 @@ class PaymentStatus(str, enum.Enum):
     REFUNDED = "REFUNDED"
 
 
+class Role(str, enum.Enum):
+    DRIVER = "DRIVER"
+    HUB = "HUB"
+
+
+class HubType(str, enum.Enum):
+    HOUSE = "HOUSE"
+    SHOP = "SHOP"
+
+
+class VerificationStatus(str, enum.Enum):
+    NOT_SUBMITTED = "NOT_SUBMITTED"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class DocType(str, enum.Enum):
+    AADHAAR = "AADHAAR"
+    VEHICLE_RC = "VEHICLE_RC"
+    HOUSE_DOCUMENT = "HOUSE_DOCUMENT"
+    TAX_RECEIPT = "TAX_RECEIPT"
+    BUILDING_PLAN = "BUILDING_PLAN"
+    OCCUPANCY_CERT = "OCCUPANCY_CERT"
+    SHOP_LICENSE = "SHOP_LICENSE"
+
+
+def _enum(cls):
+    return Enum(cls, native_enum=False, length=20)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -41,6 +72,49 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # identity verification
+    role: Mapped[Role] = mapped_column(_enum(Role), default=Role.DRIVER)
+    hub_type: Mapped[HubType | None] = mapped_column(_enum(HubType), nullable=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    vehicle_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    verification_status: Mapped[VerificationStatus] = mapped_column(_enum(VerificationStatus), default=VerificationStatus.NOT_SUBMITTED)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    documents: Mapped[list["Document"]] = relationship(back_populates="user", cascade="all, delete-orphan",
+                                                       foreign_keys="Document.user_id")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("user_id", "doc_type", name="uq_documents_user_type"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    doc_type: Mapped[DocType] = mapped_column(_enum(DocType))
+    stored_name: Mapped[str] = mapped_column(String(64))  # random name on disk; contents are encrypted
+    original_name: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(50))
+    size: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="documents", foreign_keys=[user_id])
+
+
+class OtpCode(Base):
+    __tablename__ = "otp_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

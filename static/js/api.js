@@ -5,10 +5,10 @@ function loadRazorpay() {
     s.onload = ok; s.onerror = () => no(new Error("Couldn't load the payment window. Check your connection and try again.")); document.head.append(s);
   });
 }
-async function call(path, { method = "GET", body, form } = {}) {
+async function call(path, { method = "GET", body, form, fd } = {}) {
   const headers = { "X-Requested-With": "evshare" };  // the session cookie is HttpOnly; this header blocks cross-site forms
-  if (body) headers["Content-Type"] = "application/json";
-  const res = await fetch(path, { method, headers, body: form ? new URLSearchParams(form) : body && JSON.stringify(body) });
+  if (body && !fd) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, { method, headers, body: fd || (form ? new URLSearchParams(form) : body && JSON.stringify(body)) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
@@ -19,7 +19,16 @@ async function call(path, { method = "GET", body, form } = {}) {
 export const api = {
   me: () => call("/auth/me"),
   async signIn(email, password) { await call("/auth/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
-  async register(name, email, password) { await call("/auth/register", { method: "POST", body: { name, email, password } }); return this.signIn(email, password); },
+  async register(name, email, password, role, hub_type) { await call("/auth/register", { method: "POST", body: { name, email, password, role, hub_type } }); return this.signIn(email, password); },
+  verification: () => call("/verification/status"),
+  sendCode: () => call("/verification/otp/send", { method: "POST" }),
+  confirmCode: (code) => call("/verification/otp/confirm", { method: "POST", body: { code } }),
+  setVehicle: (vehicle_number) => call("/verification/vehicle", { method: "PUT", body: { vehicle_number } }),
+  uploadDoc(doc_type, file) { const fd = new FormData(); fd.append("doc_type", doc_type); fd.append("file", file); return call("/verification/documents", { method: "POST", fd }); },
+  submitVerification: (consent) => call("/verification/submit", { method: "POST", body: { consent } }),
+  adminQueue: () => call("/admin/verifications"),
+  adminDecide: (id, approve, reason) => call(`/admin/verifications/${id}/decision`, { method: "POST", body: { approve, reason } }),
+  docUrl: (id) => `/admin/documents/${id}/file`,
   signOut: () => call("/auth/logout", { method: "POST" }).catch(() => {}),
   chargers(f) { const q = new URLSearchParams(); if (f.connector) q.set("connector_type", f.connector); if (f.power) q.set("min_power_kw", f.power); if (f.price) q.set("max_price_per_kwh", f.price); return call(`/chargers?${q}`); },
   createCharger: (body) => call("/chargers", { method: "POST", body }),

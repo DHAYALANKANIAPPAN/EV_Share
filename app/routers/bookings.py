@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from ..config import settings
-from ..deps import DB, CurrentUser
+from ..deps import DB, ApprovedDriver, CurrentUser
 from ..models import Booking, BookingStatus, Charger, PaymentStatus, utcnow
 from ..schemas import BookingCreate, BookingOut
 from ..services.availability import fits_window, window_label
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
 @router.post("", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
-def create_booking(body: BookingCreate, db: DB, user: CurrentUser):
+def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
     if body.end_time <= body.start_time:
         raise HTTPException(422, "end_time must be after start_time")
     if body.start_time < utcnow():
