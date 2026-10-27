@@ -25,4 +25,4 @@ with SessionLocal() as db:
         user = users[int(pick) - 1]
     user.is_admin, user.email_verified, user.verification_status = True, True, VerificationStatus.APPROVED
     db.commit()
-    print(f"{user.email} is now a reviewer. Sign in with 'Reviewer sign in' at the bottom of the site.")
+    print(f"{user.email} is now a reviewer. Sign in on the reviewer portal (default address: /staff).")

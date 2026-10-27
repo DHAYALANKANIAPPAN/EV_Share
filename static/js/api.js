@@ -20,6 +20,7 @@ export const api = {
   me: () => call("/auth/me"),
   async signIn(email, password) { await call("/auth/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
   async register(name, email, password, role, hub_type) { await call("/auth/register", { method: "POST", body: { name, email, password, role, hub_type } }); return this.signIn(email, password); },
+  async staffSignIn(email, password) { await call("/auth/staff/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
   verification: () => call("/verification/status"),
   sendCode: () => call("/verification/otp/send", { method: "POST" }),
   confirmCode: (code) => call("/verification/otp/confirm", { method: "POST", body: { code } }),

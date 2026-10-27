@@ -41,6 +41,12 @@ def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get(settings.staff_path, include_in_schema=False)
+def staff_portal():
+    """Reviewer portal. Not linked from the public site and kept out of search engines."""
+    return FileResponse(STATIC_DIR / "staff.html", headers={"X-Robots-Tag": "noindex, nofollow", "Cache-Control": "no-store"})
+
+
 @app.get("/classic", include_in_schema=False)
 def classic():
     """Previous Leaflet UI (adds charger sharing, reviews, owner tools) until they are ported."""

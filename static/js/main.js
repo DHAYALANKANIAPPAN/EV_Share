@@ -1,26 +1,26 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
 
-const S = { vs: null, queue: [], user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
+const S = { vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 const filtered = () => S.f.connector || S.f.power || S.f.price;
 const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.available_from.slice(0, 5)} to ${c.available_to.slice(0, 5)}` : "Open 24/7");
 
 /* ---------- chrome ---------- */
-const roleLabel = (u) => u.is_admin ? "Reviewer" : `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verification_status === "APPROVED" ? "verified" : u.verification_status === "PENDING" ? "under review" : "not verified"}`;
+const roleLabel = (u) => `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verification_status === "APPROVED" ? "verified" : u.verification_status === "PENDING" ? "under review" : "not verified"}`;
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
-  const u = S.user, ok = u && u.verification_status === "APPROVED", plain = u && !u.is_admin;
+  const u = S.user, ok = u && u.verification_status === "APPROVED", plain = u;
   nav.replaceChildren(...[tab("find", "Find chargers"),
     plain && ok && u.role === "DRIVER" ? tab("bookings", "My bookings") : null,
     plain && ok && u.role === "HUB" ? tab("chargers", "My chargers") : null, plain && ok && u.role === "HUB" ? tab("share", "Share a charger") : null,
-    plain && !ok ? tab("verify", "Verify account") : null, u && u.is_admin ? tab("review", "Review applications") : null].filter(Boolean));
+    plain && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
       h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); go("find"); toast("Signed out"); } })]
-    : [themeBtn, h("button", { className: "btn", textContent: "Sign in", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Create account", onclick: () => go("register") })]));
+    : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => go("register") })]));
   refreshIcons();
 }
 async function go(view) {  // eslint-disable-line
@@ -29,7 +29,6 @@ async function go(view) {  // eslint-disable-line
   if (view === "share" && S.user.verification_status !== "APPROVED") { toast("Verify your account before sharing a charger.", true); view = "verify"; }
   S.view = view; renderChrome(); render();
   if (view === "verify") await guard(loadVerify)();
-  if (view === "review") await guard(loadQueue)();
   if (view === "bookings") await guard(loadBookings)();
   if (view === "chargers") await guard(loadMine)();
 }
@@ -47,7 +46,7 @@ function filterBar() {
     lab("f-conn", "Connector", sel), lab("f-power", "Minimum power (kW)", num("f-power", "power", 1)), lab("f-price", "Maximum price (₹/kWh)", num("f-price", "price", 0)),
     h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; guard(loadChargers)(); } }));
 }
-const canReserve = () => !S.user || (S.user.role === "DRIVER" && !S.user.is_admin);
+const canReserve = () => !S.user || S.user.role === "DRIVER";
 function chargerRow(c) {
   const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }));
   const rating = c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} (${c.review_count})`;
@@ -240,7 +239,7 @@ function registerView() {
   const sel = (id, opts, key) => h("select", { id, onchange: (e) => { R[key] = e.target.value; render(); } }, opts.map(([v, t]) => h("option", { value: v, textContent: t, selected: v === R[key] })));
   const need = NEEDS[R.role === "DRIVER" ? "DRIVER" : R.hub];
   return h("div", { className: "grid gap-6 max-w-xl" },
-    h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Create your account" }),
+    h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Register" }),
       h("p", { className: "text-mute mt-1", textContent: "Everyone is verified before they can book or list a charger. You'll upload your documents right after this step." })),
     stepper(1), noticeBox(),
     h("section", { className: "panel p-5 grid gap-3" }, h("h2", { className: "font-semibold", textContent: "I want to" }), f("r-role", "Account type", sel("r-role", [["DRIVER", "Charge my EV (driver)"], ["HUB", "Share a charger (hub)"]], "role")),
@@ -248,12 +247,12 @@ function registerView() {
       h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
     h("form", { className: "panel p-5 grid gap-4", onsubmit: guard(async (e) => {
         e.preventDefault(); S.user = await api.register(R.name, R.email, R.pass, R.role, R.role === "HUB" ? R.hub : undefined); S.reg = null;
-        renderChrome(); toast("Account created. Next, confirm your email."); await go("verify"); }) },
+        renderChrome(); toast("Registered. Next, confirm your email."); await go("verify"); }) },
       h("h2", { className: "font-semibold", textContent: "Your details" }), f("r-name", "Full name", text("r-name", "name", { autocomplete: "name" })),
       f("r-email", "Email", text("r-email", "email", { type: "email", autocomplete: "email" }), "We'll send your verification code here."),
       f("r-pass", "Password", text("r-pass", "pass", { type: "password", minLength: 8, autocomplete: "new-password" }), "At least 8 characters."),
-      h("button", { className: "btn btn-primary", type: "submit", textContent: "Create account and continue" }),
-      h("p", { className: "text-sm text-mute" }, "Already registered? ", h("button", { type: "button", className: "underline", textContent: "Sign in", onclick: () => openAuth() }))));
+      h("button", { className: "btn btn-primary", type: "submit", textContent: "Register and continue" }),
+      h("p", { className: "text-sm text-mute" }, "Already registered? ", h("button", { type: "button", className: "underline", textContent: "Login", onclick: () => openAuth() }))));
 }
 function verifyView() {
   const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Finish your registration" }),
@@ -294,30 +293,6 @@ function verifyView() {
     noticeBox(), emailStep, docsStep, sendStep);
 }
 
-/* ---------- admin: review queue ---------- */
-async function loadQueue() { S.loading = true; render(); try { S.queue = await api.adminQueue(); } finally { S.loading = false; render(); } }
-function reviewView() {
-  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Review applications" }),
-    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Open each document, check it against the official portal, then approve or ask the applicant to fix it." }));
-  if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
-  if (!S.queue.length) return h("div", { className: "grid gap-6" }, head, h("section", { className: "panel p-8 grid gap-2 justify-items-start" }, icon("inbox", "size-6 text-mute"), h("h2", { className: "font-semibold text-lg", textContent: "No applications waiting" }), h("p", { className: "text-sm text-mute", textContent: "New submissions will show up here." })));
-  return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.queue.map((a) => h("li", { className: "row" },
-    h("div", { className: "grid gap-2 min-w-0" }, h("h3", { className: "font-medium", textContent: `${a.name} (${a.role === "HUB" ? `Hub, ${a.hub_type.toLowerCase()}` : "Driver"})` }),
-      h("p", { className: "text-sm text-mute", textContent: `${a.email}${a.vehicle_number ? `, vehicle ${a.vehicle_number}` : ""}` }),
-      h("ul", { className: "flex gap-2 flex-wrap" }, a.documents.map((d) => h("li", {}, h("a", { className: "btn", href: api.docUrl(d.id), target: "_blank", rel: "noopener noreferrer" }, icon("file-text", "size-4"), d.doc_type.replaceAll("_", " ").toLowerCase()))))),
-    h("div", { className: "flex gap-2 items-center flex-wrap self-start" },
-      h("button", { className: "btn btn-primary", textContent: "Approve", onclick: guard(async () => { await api.adminDecide(a.user_id, true); toast(`${a.name} approved`); await loadQueue(); }) }),
-      h("button", { className: "btn btn-danger", textContent: "Ask for changes", onclick: () => askReason(a) }))))));
-}
-function askReason(a) {
-  const d = $("#dlg"), opener = document.activeElement, why = h("textarea", { id: "why", maxLength: 500, required: true, minLength: 5, placeholder: "e.g. The RC photo is blurry. Please upload a clearer copy." });
-  d.onclose = () => opener && opener.focus && opener.focus();
-  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => { e.preventDefault(); await api.adminDecide(a.user_id, false, why.value); d.close(); toast("Applicant notified in the app"); await loadQueue(); }) },
-    h("h2", { className: "font-semibold text-lg", textContent: `Ask ${a.name} for changes` }), h("div", { className: "field" }, h("label", { htmlFor: "why", textContent: "What should they fix?" }), why),
-    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Cancel", onclick: () => d.close() }), h("button", { className: "btn btn-danger", type: "submit", textContent: "Send feedback" }))));
-  d.showModal(); why.focus();
-}
-
 /* ---------- reserve slide-over ---------- */
 const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 function openDrawer(c) {
@@ -344,32 +319,26 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
-/* ---------- sign in (drivers/hubs, and a separate reviewer entrance) ---------- */
-function openAuth(staff = false) {
+/* ---------- login (drivers and hubs) ---------- */
+function openAuth() {
   const d = $("#dlg"), opener = document.activeElement;
   const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password" });
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); S.user = await api.signIn(email.value, pass.value);
-      if (staff && !S.user.is_admin) { await api.signOut(); S.user = null; throw new Error("This account isn't a reviewer. Use the normal Sign in instead."); }
-      d.close(); toast(`Welcome, ${S.user.name}`); renderChrome();
-      if (S.user.is_admin) return go("review");
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome();
       if (S.user.verification_status !== "APPROVED") return go("verify");
-      go(["verify", "review", "register"].includes(S.view) ? "find" : S.view); }) },
-    h("h2", { className: "text-xl font-semibold", textContent: staff ? "Reviewer sign in" : "Sign in to EV Share" }),
-    staff ? h("p", { className: "text-sm text-mute", textContent: "For EV Share staff who check driver and hub documents." }) : null,
-    f("a-email", "Email", email), f("a-pass", "Password", pass),
-    h("button", { className: "btn btn-primary", type: "submit", textContent: staff ? "Sign in as reviewer" : "Sign in" }),
-    staff ? null : h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Create an account", onclick: () => { d.close(); go("register"); } }),
+      go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
+    h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
+    h("button", { className: "btn btn-primary", type: "submit", textContent: "Login" }),
+    h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "New here? Register", onclick: () => { d.close(); go("register"); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Cancel", onclick: () => d.close() })));
   d.showModal(); email.focus();
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, review: reviewView, register: registerView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView }[S.view]()); refreshIcons(); }
 (async function init() {
-  const staffLink = $("#staff"); if (staffLink) staffLink.onclick = () => openAuth(true);
-  try { S.user = await api.me(); } catch { /* not signed in */ }
+  try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
   renderChrome(); await guard(loadChargers)();
 })();

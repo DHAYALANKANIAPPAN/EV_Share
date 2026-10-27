@@ -26,13 +26,14 @@ def register(body: UserCreate, db: DB):
     return user
 
 
-@router.post("/login", response_model=Token)
-def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
+def _authenticate(request: Request, response: Response, form, db, staff: bool) -> Token:
+    """Shared by both entrances. Reviewers can only use the staff entrance, everyone else only the public one.
+    A wrong entrance gets the same 'incorrect email or password' answer, so it reveals nothing."""
     email = form.username.lower()
     key = f"{request.client.host if request.client else '?'}|{email}"
     login_limiter.check(key)
     user = db.scalar(select(User).where(User.email == email))
-    if not user or not verify_password(form.password, user.password_hash):
+    if not user or user.is_admin != staff or not verify_password(form.password, user.password_hash):
         login_limiter.fail(key)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
     login_limiter.reset(key)
@@ -40,6 +41,16 @@ def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRe
     response.set_cookie(COOKIE_NAME, token, max_age=settings.access_token_minutes * 60, httponly=True,
                         samesite="lax", secure=settings.env != "dev", path="/")
     return Token(access_token=token)
+
+
+@router.post("/login", response_model=Token)
+def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
+    return _authenticate(request, response, form, db, staff=False)
+
+
+@router.post("/staff/login", response_model=Token, include_in_schema=False)
+def staff_login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
+    return _authenticate(request, response, form, db, staff=True)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

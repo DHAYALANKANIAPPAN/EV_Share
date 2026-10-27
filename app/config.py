@@ -1,3 +1,5 @@
+import re
+
 from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +15,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./evshare.db"
     access_token_minutes: int = 60
     max_booking_hours: int = 8
+    staff_path: str = "/staff"  # unlinked reviewer portal page; pick something less guessable in production
     login_max_failures: int = 5  # per (client IP, email) within the window
     login_window_minutes: int = 15
     unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
@@ -48,6 +51,9 @@ class Settings(BaseSettings):
             self.secret_key = DEV_SECRET
         if self.env != "dev" and (self.secret_key == DEV_SECRET or len(self.secret_key) < 32):
             raise ValueError("EVSHARE_SECRET_KEY must be a random string of 32+ characters when EVSHARE_ENV is not 'dev'")
+        if not re.fullmatch(r"/[A-Za-z0-9_-]{2,40}", self.staff_path) or self.staff_path.lstrip("/") in {
+                "static", "auth", "admin", "docs", "redoc", "openapi", "health", "chargers", "bookings", "payments", "reviews", "verification", "classic"}:
+            raise ValueError("EVSHARE_STAFF_PATH must look like /my-secret-portal and must not clash with an existing route")
         if self.otp_provider not in ("console", "smtp"):
             raise ValueError("EVSHARE_OTP_PROVIDER must be 'console' or 'smtp'")
         if self.otp_provider == "smtp" and not (self.smtp_host and self.smtp_from):

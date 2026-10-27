@@ -19,4 +19,4 @@ with SessionLocal() as db:
     db.add(User(email=email, name=name, password_hash=hash_password(password), role=Role.DRIVER, is_admin=True,
                 email_verified=True, verification_status=VerificationStatus.APPROVED))
     db.commit()
-print(f"Reviewer {email} created. Sign in with 'Reviewer sign in' at the bottom of the site.")
+print(f"Reviewer {email} created. Sign in on the reviewer portal (default address: /staff).")
