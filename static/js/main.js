@@ -8,18 +8,19 @@ const filtered = () => S.f.connector || S.f.power || S.f.price;
 const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.available_from.slice(0, 5)} to ${c.available_to.slice(0, 5)}` : "Open 24/7");
 
 /* ---------- chrome ---------- */
+const roleLabel = (u) => u.is_admin ? "Reviewer" : `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verification_status === "APPROVED" ? "verified" : u.verification_status === "PENDING" ? "under review" : "not verified"}`;
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
-  const u = S.user, ok = u && u.verification_status === "APPROVED";
+  const u = S.user, ok = u && u.verification_status === "APPROVED", plain = u && !u.is_admin;
   nav.replaceChildren(...[tab("find", "Find chargers"),
-    u && u.role === "DRIVER" ? tab("bookings", "My bookings") : null,
-    u && u.role === "HUB" ? tab("chargers", "My chargers") : null, u && u.role === "HUB" ? tab("share", "Share a charger") : null,
-    u && !ok && !u.is_admin ? tab("verify", "Verify account") : null, u && u.is_admin ? tab("review", "Review applications") : null].filter(Boolean));
+    plain && ok && u.role === "DRIVER" ? tab("bookings", "My bookings") : null,
+    plain && ok && u.role === "HUB" ? tab("chargers", "My chargers") : null, plain && ok && u.role === "HUB" ? tab("share", "Share a charger") : null,
+    plain && !ok ? tab("verify", "Verify account") : null, u && u.is_admin ? tab("review", "Review applications") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
-  user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: S.user.name }),
+  user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
       h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); go("find"); toast("Signed out"); } })]
-    : [themeBtn, h("button", { className: "btn", textContent: "Sign in", onclick: openAuth }), h("button", { className: "btn btn-primary", textContent: "Create account", onclick: () => go("register") })]));
+    : [themeBtn, h("button", { className: "btn", textContent: "Sign in", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Create account", onclick: () => go("register") })]));
   refreshIcons();
 }
 async function go(view) {  // eslint-disable-line
@@ -46,6 +47,7 @@ function filterBar() {
     lab("f-conn", "Connector", sel), lab("f-power", "Minimum power (kW)", num("f-power", "power", 1)), lab("f-price", "Maximum price (₹/kWh)", num("f-price", "price", 0)),
     h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; guard(loadChargers)(); } }));
 }
+const canReserve = () => !S.user || (S.user.role === "DRIVER" && !S.user.is_admin);
 function chargerRow(c) {
   const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }));
   const rating = c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} (${c.review_count})`;
@@ -53,7 +55,7 @@ function chargerRow(c) {
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve")));
+      canReserve() ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve") : null));
 }
 function hl(id) {
   S.on = id;
@@ -251,7 +253,7 @@ function registerView() {
       f("r-email", "Email", text("r-email", "email", { type: "email", autocomplete: "email" }), "We'll send your verification code here."),
       f("r-pass", "Password", text("r-pass", "pass", { type: "password", minLength: 8, autocomplete: "new-password" }), "At least 8 characters."),
       h("button", { className: "btn btn-primary", type: "submit", textContent: "Create account and continue" }),
-      h("p", { className: "text-sm text-mute" }, "Already registered? ", h("button", { type: "button", className: "underline", textContent: "Sign in", onclick: openAuth }))));
+      h("p", { className: "text-sm text-mute" }, "Already registered? ", h("button", { type: "button", className: "underline", textContent: "Sign in", onclick: () => openAuth() }))));
 }
 function verifyView() {
   const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Finish your registration" }),
@@ -342,20 +344,24 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
-/* ---------- sign in ---------- */
-function openAuth() {
+/* ---------- sign in (drivers/hubs, and a separate reviewer entrance) ---------- */
+function openAuth(staff = false) {
   const d = $("#dlg"), opener = document.activeElement;
   const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password" });
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome, ${S.user.name}`); renderChrome();
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value);
+      if (staff && !S.user.is_admin) { await api.signOut(); S.user = null; throw new Error("This account isn't a reviewer. Use the normal Sign in instead."); }
+      d.close(); toast(`Welcome, ${S.user.name}`); renderChrome();
       if (S.user.is_admin) return go("review");
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "review", "register"].includes(S.view) ? "find" : S.view); }) },
-    h("h2", { className: "text-xl font-semibold", textContent: "Sign in to EV Share" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
-    h("button", { className: "btn btn-primary", type: "submit", textContent: "Sign in" }),
-    h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Create an account", onclick: () => { d.close(); go("register"); } }),
+    h("h2", { className: "text-xl font-semibold", textContent: staff ? "Reviewer sign in" : "Sign in to EV Share" }),
+    staff ? h("p", { className: "text-sm text-mute", textContent: "For EV Share staff who check driver and hub documents." }) : null,
+    f("a-email", "Email", email), f("a-pass", "Password", pass),
+    h("button", { className: "btn btn-primary", type: "submit", textContent: staff ? "Sign in as reviewer" : "Sign in" }),
+    staff ? null : h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Create an account", onclick: () => { d.close(); go("register"); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Cancel", onclick: () => d.close() })));
   d.showModal(); email.focus();
 }
@@ -363,6 +369,7 @@ function openAuth() {
 /* ---------- boot ---------- */
 function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, review: reviewView, register: registerView }[S.view]()); refreshIcons(); }
 (async function init() {
+  const staffLink = $("#staff"); if (staffLink) staffLink.onclick = () => openAuth(true);
   try { S.user = await api.me(); } catch { /* not signed in */ }
   renderChrome(); await guard(loadChargers)();
 })();

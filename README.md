@@ -125,7 +125,7 @@ Everyone registers as a **driver** or a **hub** (house or shop) and must be appr
 Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts, single use, resend cooldown), upload documents, agree to the consent statement, submit. A **reviewer** (an account with `is_admin`) opens each document, checks it against the official portals, and approves or asks for changes with a reason. Until approved, drivers cannot book, hubs cannot list, and an unapproved hub's chargers are hidden from search.
 
 - Registration is one guided flow: create account, confirm email, upload documents, then review. The required documents are listed before the user signs up.
-- Make a reviewer: `python -m scripts.make_admin you@example.com` (find emails with `python -m scripts.list_users`). The seed script also creates `admin@example.com`.
+- **Reviewer (admin) accounts cannot be created from the website** (that would let anyone approve themselves). Create one from the terminal: `python -m scripts.create_admin` (new account) or `python -m scripts.make_admin` (pick an existing account from a list). Reviewers sign in through **Reviewer sign in** at the bottom of the site. The seed script also creates `admin@example.com`.
 - Re-test the flow with an existing account: `python -m scripts.reset_verification you@example.com`.
 - Files are validated by content (PDF/JPG/PNG, 5 MB), stored under random names and **encrypted at rest** (Fernet). Set `EVSHARE_DOCS_ENCRYPTION_KEY` outside dev. Only reviewers can read them.
 - **Aadhaar:** the app never stores the number. Ask users to upload a masked copy. Rules for private entities handling Aadhaar are strict, so get legal advice before going live.
