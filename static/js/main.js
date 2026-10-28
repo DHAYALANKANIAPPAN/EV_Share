@@ -269,7 +269,8 @@ function verifyView() {
         h("div", { className: "flex gap-2 flex-wrap items-end" }, h("button", { className: "btn", textContent: "Email me a code", onclick: guard(async () => { await api.sendCode(); toast("Code sent. Check your inbox."); $("#v-code").focus(); }) }),
           h("div", { className: "field" }, h("label", { htmlFor: "v-code", textContent: "Enter the code" }), code),
           h("button", { className: "btn btn-primary", textContent: "Confirm code", onclick: guard(async () => { await api.confirmCode(code.value.trim()); toast("Email confirmed"); await loadVerify(); await refreshUser(); }) }))));
-  const car = h("input", { id: "v-car", value: v.vehicle_number || "", disabled: locked, placeholder: "TN45AB1234", maxLength: 20 });
+  const car = h("input", { id: "v-car", value: (v.vehicle_number || "").toUpperCase(), disabled: locked, placeholder: "TN45AB1234", maxLength: 20, autocapitalize: "characters", spellcheck: false, className: "uppercase tracking-wide",
+    oninput: (e) => { const at = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(at, at); } });
   const docRows = h("ul", { className: "panel overflow-hidden" }, v.required.map((r) => h("li", { className: "row" },
     h("div", { className: "grid gap-1 min-w-0" }, h("p", { className: "font-medium text-sm", textContent: r.label }),
       h("p", { className: "text-sm flex items-center gap-1 " + (r.uploaded ? "text-accent" : "text-mute") }, icon(r.uploaded ? "check-circle-2" : "circle-dashed", "size-4"), h("span", { className: "truncate", textContent: r.uploaded ? r.original_name : "Not uploaded" }))),
@@ -277,7 +278,7 @@ function verifyView() {
       h("input", { type: "file", className: "sr-only", accept: ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png", disabled: locked,
         onchange: guard(async (e) => { const f = e.target.files[0]; if (!f) return; await api.uploadDoc(r.doc_type, f); toast("Uploaded"); await loadVerify(); }) })))));
   const docsStep = step("Step 3 of 4: Upload your documents", !v.email_verified && !locked,
-    v.role === "DRIVER" ? h("div", { className: "flex gap-2 items-end flex-wrap" }, h("div", { className: "field flex-1 min-w-[200px]" }, h("label", { htmlFor: "v-car", textContent: "Vehicle registration number" }), car),
+    v.role === "DRIVER" ? h("div", { className: "flex gap-2 items-end flex-wrap" }, h("div", { className: "field flex-1 min-w-[200px]" }, h("label", { htmlFor: "v-car", textContent: "Vehicle registration number" }), car, h("p", { className: "text-xs text-mute font-normal", textContent: "Capital letters and digits only, for example TN45AB1234. Spaces and hyphens are ignored." })),
       h("button", { className: "btn", textContent: "Save number", disabled: locked, onclick: guard(async () => { await api.setVehicle(car.value); toast("Saved"); await loadVerify(); }) })) : null,
     h("p", { className: "text-sm text-mute", textContent: "PDF, JPG or PNG, up to 5 MB each. Files are encrypted and only our reviewers can open them." }), docRows);
   const consent = h("input", { id: "v-consent", type: "checkbox", className: "size-5", disabled: locked, checked: locked });
