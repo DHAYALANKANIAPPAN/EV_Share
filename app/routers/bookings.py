@@ -5,11 +5,11 @@ from sqlalchemy import select
 
 from ..config import settings
 from ..deps import DB, ApprovedDriver, CurrentUser
-from ..models import Booking, BookingStatus, Charger, PaymentStatus, utcnow
+from ..models import Booking, BookingStatus, Charger, utcnow
 from ..schemas import BookingCreate, BookingOut
 from ..services.availability import fits_window, window_label
 from ..services.expiry import expire_unpaid
-from ..services.payments import get_provider
+from ..services.bookings import cancel_with_refund
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -82,11 +82,6 @@ def cancel_booking(booking_id: int, db: DB, user: CurrentUser):
     if booking.status == BookingStatus.CANCELLED:
         raise HTTPException(status.HTTP_409_CONFLICT, "Booking already cancelled")
 
-    payment = booking.payment
-    if payment and payment.status == PaymentStatus.PAID and payment.amount > 0 and payment.provider != "free":
-        get_provider().refund(payment.provider_payment_id, payment.amount)  # raises 502 before we change anything
-    if payment and payment.status == PaymentStatus.PAID:
-        payment.status = PaymentStatus.REFUNDED
-    booking.status = BookingStatus.CANCELLED
+    cancel_with_refund(booking)
     db.commit()
     return booking

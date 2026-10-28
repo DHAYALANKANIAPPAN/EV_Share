@@ -132,6 +132,16 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 - The OTP is emailed (`EVSHARE_OTP_PROVIDER=smtp`); in dev it is printed in the server log. Every sign-up and OTP screen shows a notice that EV Share never asks for OTPs by call, text or email.
 - Existing accounts are treated as approved when you upgrade (migration `0002`); accounts that already own chargers become house hubs.
 
+### Managing users (reviewer portal)
+
+The portal has two tabs: **Applications** and **Users**. Users lists every driver and hub (search by name or email, filter by type and status). **Remove** asks for a reason, then:
+- the user is emailed the reason and their login stops working (sessions end immediately);
+- upcoming bookings (as driver, or on the hub's chargers) are cancelled and refunded;
+- the hub's chargers disappear from search;
+- the email address stays reserved: the person must register again with a different email and verify again.
+
+**Restore** reverses a removal. If the email cannot be sent, the removal still happens and the reviewer is told to contact the person another way. The mail settings are the same `EVSHARE_SMTP_*` values used for OTP codes.
+
 ## Security
 
 - Browser sessions use an **HttpOnly, SameSite=Lax cookie** (`Secure` outside dev); the token is never exposed to page JavaScript. Cookie-authenticated writes also need the `X-Requested-With: evshare` header (CSRF defence). API clients can keep using `Authorization: Bearer`.

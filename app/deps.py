@@ -28,7 +28,7 @@ def get_current_user(request: Request, bearer: Annotated[str | None, Depends(oau
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Missing X-Requested-With header")
     user_id = decode_access_token(token) if token else None
     user = db.get(User, user_id) if user_id is not None else None
-    if user is None:
+    if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"})
     return user
