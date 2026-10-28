@@ -2,15 +2,14 @@ import hashlib
 import hmac
 import logging
 import secrets
-import smtplib
 from datetime import timedelta
-from email.message import EmailMessage
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from ..config import settings
 from ..models import OtpCode, User, utcnow
+from .mailer import MailError, send_mail
 
 log = logging.getLogger("evshare.otp")
 
@@ -25,16 +24,10 @@ class ConsoleSender:
 
 class SmtpSender:
     def send(self, email: str, code: str) -> None:
-        msg = EmailMessage()
-        msg["Subject"], msg["From"], msg["To"] = "Your EV Share verification code", settings.smtp_from, email
-        msg.set_content(f"Your EV Share verification code is {code}. It expires in {settings.otp_ttl_minutes} minutes.\n\n{NOTICE}")
         try:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as s:
-                s.starttls()
-                if settings.smtp_user:
-                    s.login(settings.smtp_user, settings.smtp_password)
-                s.send_message(msg)
-        except (OSError, smtplib.SMTPException) as exc:
+            send_mail(email, "Your EV Share verification code",
+                      f"Your EV Share verification code is {code}. It expires in {settings.otp_ttl_minutes} minutes.\n\n{NOTICE}")
+        except MailError as exc:
             raise HTTPException(502, "We couldn't send the code. Try again in a minute.") from exc
 
 

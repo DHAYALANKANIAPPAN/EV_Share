@@ -36,6 +36,8 @@ def _authenticate(request: Request, response: Response, form, db, staff: bool) -
     if not user or user.is_admin != staff or not verify_password(form.password, user.password_hash):
         login_limiter.fail(key)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
+    if not user.is_active:  # only revealed after the password was right
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been removed. Check your email for the reason, or register again with a different email address.")
     login_limiter.reset(key)
     token = create_access_token(user.id)
     response.set_cookie(COOKIE_NAME, token, max_age=settings.access_token_minutes * 60, httponly=True,

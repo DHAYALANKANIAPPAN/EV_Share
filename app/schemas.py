@@ -241,3 +241,33 @@ class AdminVerificationOut(BaseModel):
     status: VerificationStatus
     submitted_at: datetime | None
     documents: list[DocumentOut]
+
+
+# ---- admin: user management ----
+class AdminUserOut(ORM):
+    id: int
+    name: str
+    email: EmailStr
+    role: Role
+    hub_type: HubType | None
+    vehicle_number: str | None
+    verification_status: VerificationStatus
+    is_active: bool
+    created_at: datetime
+    removed_at: datetime | None
+    removal_reason: str | None
+
+
+class UserListOut(BaseModel):
+    items: list[AdminUserOut]
+    total: int
+
+
+class RemoveIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+
+class RemoveOut(BaseModel):
+    user: AdminUserOut
+    cancelled_bookings: int
+    email_sent: bool

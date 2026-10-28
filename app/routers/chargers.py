@@ -60,7 +60,7 @@ def search_chargers(
         raise HTTPException(422, "Provide both lat and lon, or neither")
 
     stmt = select(Charger).where(Charger.is_active.is_(True),
-                                 Charger.owner.has(User.verification_status == VerificationStatus.APPROVED))
+                                 Charger.owner.has((User.verification_status == VerificationStatus.APPROVED) & User.is_active.is_(True)))
     if connector_type:
         stmt = stmt.where(Charger.connector_type == connector_type)
     if min_power_kw is not None:

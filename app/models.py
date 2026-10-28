@@ -86,6 +86,12 @@ class User(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
+    # account removal by a reviewer (the email stays reserved, so it cannot be used to register again)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    removal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    removed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
     documents: Mapped[list["Document"]] = relationship(back_populates="user", cascade="all, delete-orphan",
                                                        foreign_keys="Document.user_id")
 
