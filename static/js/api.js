@@ -12,7 +12,7 @@ async function call(path, { method = "GET", body, form, fd } = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
-    throw new Error(Array.isArray(d) ? d.map((e) => e.msg).join(". ") : d || "Something went wrong. Try again.");
+    throw new Error(Array.isArray(d) ? d.map((e) => e.msg.replace(/^Value error, /, "")).join(". ") : d || "Something went wrong. Try again.");
   }
   return data;
 }
