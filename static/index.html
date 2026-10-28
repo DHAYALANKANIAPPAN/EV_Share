@@ -35,6 +35,7 @@ body{font-family:Geist,system-ui,sans-serif;line-height:1.55}
 dialog{border:1px solid rgb(var(--line));border-radius:12px;background:rgb(var(--panel));color:rgb(var(--ink));padding:24px;width:min(420px,92vw)}dialog::backdrop{background:rgba(0,0,0,.4)}
 .sk{background:rgb(var(--line));border-radius:6px;animation:p 1.4s ease-in-out infinite}@keyframes p{50%{opacity:.5}}
 .evpin{width:28px;height:28px;border-radius:50%;background:rgb(var(--accent));border:3px solid rgb(var(--panel));outline:1px solid rgb(var(--accent));transition:transform .15s}.evpin[data-on="true"]{transform:scale(1.3)}
+.has-livebar main{padding-bottom:8rem}.has-livebar #toasts{bottom:6rem}
 .pin{cursor:pointer;transition:transform .15s;transform-box:fill-box;transform-origin:center}.pin:hover,.pin[data-on="true"]{transform:scale(1.25)}
 @media (prefers-reduced-motion:reduce){*,::before,::after{transition:opacity .1s!important;animation:none!important;transform:none!important}}
 </style>
@@ -49,6 +50,7 @@ dialog{border:1px solid rgb(var(--line));border-radius:12px;background:rgb(var(-
   </div>
 </header>
 <main id="main" class="mx-auto max-w-7xl px-4 py-8"></main>
+<div id="livebar" hidden class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-panel" style="padding-bottom:env(safe-area-inset-bottom,0px)" role="region" aria-label="Hub status"></div>
 <div id="scrim" class="scrim"></div>
 <aside id="drawer" class="drawer" aria-label="Reserve a charger" role="dialog" aria-modal="true"></aside>
 <dialog id="dlg"></dialog>

@@ -10,6 +10,7 @@ from ..schemas import BookingCreate, BookingOut
 from ..services.availability import fits_window, window_label
 from ..services.expiry import expire_unpaid
 from ..services.bookings import cancel_with_refund
+from ..services.live import charger_is_live
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -30,6 +31,8 @@ def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Charger not found or not available")
     if charger.owner_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot book your own charger")
+    if not charger_is_live(charger):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This hub is offline right now and can't take new bookings. Try again when it's live.")
     if not fits_window(charger, body.start_time, body.end_time):
         raise HTTPException(422, f"Charger is only available {window_label(charger)}")
 

@@ -5,6 +5,7 @@ from ..deps import DB, ApprovedHub, CurrentUser
 from ..models import Charger, ConnectorType, Review, User, VerificationStatus
 from ..schemas import ChargerCreate, ChargerOut, ChargerUpdate, _check_window
 from ..services.geo import bounding_box, haversine_km
+from ..services.live import charger_is_live
 
 router = APIRouter(prefix="/chargers", tags=["chargers"])
 
@@ -31,6 +32,7 @@ def to_out(db, chargers: list[Charger], distances: dict[int, float] | None = Non
         o = ChargerOut.model_validate(c)
         o.distance_km = (distances or {}).get(c.id)
         o.avg_rating, o.review_count = ratings.get(c.id, (None, 0))
+        o.is_live = charger_is_live(c)
         out.append(o)
     return out
 
@@ -53,6 +55,7 @@ def search_chargers(
     min_power_kw: float | None = Query(None, gt=0),
     max_price_per_kwh: float | None = Query(None, ge=0),
     min_rating: float | None = Query(None, ge=1, le=5),
+    live_only: bool = False,
     limit: int = Query(50, ge=1, le=200),
 ):
     """List active chargers. With `lat` and `lon`, results are filtered by radius and sorted nearest-first."""
@@ -85,6 +88,9 @@ def search_chargers(
     out = to_out(db, chargers, distances)
     if min_rating is not None:
         out = [c for c in out if c.avg_rating is not None and c.avg_rating >= min_rating]
+    if live_only:
+        out = [c for c in out if c.is_live]
+    out.sort(key=lambda c: not c.is_live)  # live chargers first; keeps the nearest-first order within each group
     return out[:limit]
 
 
