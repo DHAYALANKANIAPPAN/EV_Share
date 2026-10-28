@@ -1,11 +1,44 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
 
-const S = { vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
+const S = { live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
+const where = () => new Promise((ok, no) => navigator.geolocation
+  ? navigator.geolocation.getCurrentPosition((p) => ok(p.coords), () => no(new Error("We couldn't read your location. Allow location access in your browser, then try again.")), { enableHighAccuracy: true, timeout: 15000 })
+  : no(new Error("This browser can't share your location.")));
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 const filtered = () => S.f.connector || S.f.power || S.f.price;
 const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.available_from.slice(0, 5)} to ${c.available_to.slice(0, 5)}` : "Open 24/7");
+
+/* ---------- hub presence: Go live bar ---------- */
+const isHub = () => !!S.user && S.user.role === "HUB" && S.user.verification_status === "APPROVED";
+let beat = null;
+async function syncLive() {
+  if (!isHub()) S.live = null; else { try { S.live = await api.liveStatus(); } catch { S.live = null; } }
+  const on = !!(S.live && S.live.is_live);
+  if (on && !beat) beat = setInterval(heartbeat, 5 * 60 * 1000); else if (!on && beat) { clearInterval(beat); beat = null; }
+  renderLiveBar();
+}
+async function heartbeat() {  // re-checks the hub's location while the page is open; going out of range takes the hub offline
+  try { const p = await where(); S.live = await api.goLive(p.latitude, p.longitude); renderLiveBar(); } catch (e) { toast(e.message, true); await syncLive(); }
+}
+function refreshView() { if (S.view === "find") guard(loadChargers)(); if (S.view === "chargers") guard(loadMine)(); }
+function renderLiveBar() {
+  const bar = $("#livebar"); document.body.classList.toggle("has-livebar", isHub()); bar.hidden = !isHub();
+  if (!isHub()) return bar.replaceChildren();
+  const L = S.live, live = !!(L && L.is_live);
+  const btn = h("button", { className: "btn " + (live ? "" : "btn-primary"), textContent: live ? "Go offline" : "Go live", onclick: guard(async () => {
+    btn.disabled = true; btn.textContent = live ? "Going offline…" : "Getting your location…";
+    try {
+      if (live) { await api.goOffline(); toast("You're offline. No new orders."); }
+      else { const p = await where(); await api.goLive(p.latitude, p.longitude); toast("You're live. Drivers can now book your chargers."); }
+    } finally { await syncLive(); refreshView(); } }) });
+  const at = live ? utc(L.live_until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  bar.replaceChildren(h("div", { className: "mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap" },
+    h("p", { className: "text-sm flex items-center gap-2" }, h("span", { className: "inline-block size-3 rounded-full " + (live ? "bg-accent" : "bg-line"), "aria-hidden": "true" }),
+      live ? `You're live. ${L.chargers_live} of ${L.chargers_total} chargers are taking orders. Keep this page open; you'll go offline at ${at} if it stops updating.`
+           : "You're offline. Go live when you're at your charger to start receiving charging orders."), btn));
+}
 
 /* ---------- chrome ---------- */
 const roleLabel = (u) => `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verification_status === "APPROVED" ? "verified" : u.verification_status === "PENDING" ? "under review" : "not verified"}`;
@@ -19,7 +52,7 @@ function renderChrome() {
     plain && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
-      h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); go("find"); toast("Signed out"); } })]
+      h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); await syncLive(); go("find"); toast("Signed out"); } })]
     : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => go("register") })]));
   refreshIcons();
 }
@@ -48,13 +81,13 @@ function filterBar() {
 }
 const canReserve = () => !S.user || S.user.role === "DRIVER";
 function chargerRow(c) {
-  const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }));
+  const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }), h("span", { className: c.is_live ? "text-accent font-medium" : "", textContent: c.is_live ? "● Live now" : "Offline" }));
   const rating = c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} (${c.review_count})`;
   return h("li", { className: "row", dataset: { on: String(S.on === c.id), id: c.id }, onmouseenter: () => hl(c.id), onmouseleave: () => hl(null) },
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      canReserve() ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve") : null));
+      canReserve() ? (c.is_live ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve") : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
 }
 function hl(id) {
   S.on = id;
@@ -164,7 +197,7 @@ function mineView() {
     h("h2", { className: "font-semibold text-lg", textContent: "You haven't shared a charger yet" }), h("p", { className: "text-sm text-mute", textContent: "List your home or workplace charger so nearby drivers can reserve it." }), h("button", { className: "btn btn-primary mt-2", textContent: "Share a charger", onclick: () => go("share") })));
   return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.mine.map((c) => h("li", { className: "row" },
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.connector_type.replace("_", " ")}, ${c.power_kw} kW, ${money(c.price_per_kwh)}/kWh. ${windowText(c)}` }),
-      h("p", { className: "text-sm flex items-center gap-1 " + (c.is_active ? "text-accent" : "text-mute") }, icon(c.is_active ? "check-circle-2" : "pause-circle", "size-4"), h("span", { textContent: c.is_active ? "Listed" : "Paused" }))),
+      h("p", { className: "text-sm flex items-center gap-1 " + (c.is_active ? "text-accent" : "text-mute") }, icon(c.is_active ? "check-circle-2" : "pause-circle", "size-4"), h("span", { textContent: `${c.is_active ? "Listed" : "Paused"}, ${c.is_live ? "live now" : "offline"}` }))),
     h("div", { className: "flex gap-2 items-center flex-wrap" }, h("button", { className: "btn", textContent: "View bookings", onclick: guard(() => openOwnerBookings(c)) }),
       h("button", { className: "btn", textContent: c.is_active ? "Pause listing" : "Resume listing", onclick: guard(async () => { await api.setActive(c.id, !c.is_active); toast(c.is_active ? "Listing paused" : "Listing resumed"); await loadMine(); }) }))))));
 }
@@ -218,7 +251,7 @@ function shareView() {
 /* ---------- account verification ---------- */
 const NOTICE = "EV Share will never call, text or email you to ask for an OTP, password or card details. Enter a code only inside this app, on the screen that asks for it. If anyone asks you to read one out, it is a scam.";
 const noticeBox = () => h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("shield-alert", "size-5 shrink-0 text-accent"), h("p", {}, h("strong", { textContent: "Staying safe. " }), NOTICE));
-async function refreshUser() { S.user = await api.me(); renderChrome(); }
+async function refreshUser() { S.user = await api.me(); renderChrome(); await syncLive(); }
 async function loadVerify() { S.loading = true; render(); try { S.vs = await api.verification(); } finally { S.loading = false; render(); } }
 const STATUS = { NOT_SUBMITTED: ["circle-dashed", "Not submitted yet", "text-mute"], PENDING: ["clock", "Under review. We'll approve or ask for changes soon.", "text-mute"], APPROVED: ["check-circle-2", "Verified. You're all set.", "text-accent"], REJECTED: ["x-circle", "Needs changes", "text-danger"] };
 const STEPS = ["Create account", "Confirm email", "Upload documents", "Review"];
@@ -300,6 +333,7 @@ function openDrawer(c) {
   if (!S.user) return openAuth();
   if (S.user.role !== "DRIVER") return toast("Only driver accounts can reserve chargers.", true);
   if (S.user.verification_status !== "APPROVED") { toast("Verify your account to reserve chargers.", true); return go("verify"); }
+  if (!c.is_live) return toast("This hub is offline right now. Try again when it's live.", true);
   const opener = document.activeElement, d = $("#drawer"), s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 2);
   const start = h("input", { id: "d-start", type: "datetime-local", required: true, value: local(s) }), end = h("input", { id: "d-end", type: "datetime-local", required: true, value: local(new Date(s.getTime() + 36e5)) });
   const est = h("p", { className: "text-lg font-semibold" }), upd = () => { const hrs = (new Date(end.value) - new Date(start.value)) / 36e5; est.textContent = hrs > 0 ? `Up to ${money(c.power_kw * hrs * c.price_per_kwh)} for ${+hrs.toFixed(1)} h` : ""; };
@@ -327,7 +361,7 @@ function openAuth() {
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome();
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
     h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
@@ -341,5 +375,5 @@ function openAuth() {
 function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView }[S.view]()); refreshIcons(); }
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
-  renderChrome(); await guard(loadChargers)();
+  renderChrome(); await syncLive(); await guard(loadChargers)();
 })();

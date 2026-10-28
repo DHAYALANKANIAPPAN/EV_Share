@@ -86,6 +86,10 @@ class User(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
+    # hub presence: live while live_until is in the future; the location is the hub's last "Go live" ping
+    live_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    live_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    live_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     # account removal by a reviewer (the email stays reserved, so it cannot be used to register again)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -1,9 +1,9 @@
 """Create demo users and chargers (run `alembic upgrade head` first).  Usage: python -m scripts.seed"""
-from datetime import time
+from datetime import time, timedelta
 
 from app import models  # noqa: F401
 from app.database import SessionLocal
-from app.models import Charger, ConnectorType, HubType, Role, User, VerificationStatus
+from app.models import Charger, ConnectorType, HubType, Role, User, VerificationStatus, utcnow
 from app.security import hash_password
 
 # title, address, lat, lon, connector, kW, price/kWh, available_from, available_to
@@ -21,7 +21,8 @@ with SessionLocal() as db:
         print("Seed data already present.")
     else:
         host = User(email="host@example.com", name="Demo Host", password_hash=hash_password("password123"), role=Role.HUB,
-                    hub_type=HubType.HOUSE, email_verified=True, verification_status=VerificationStatus.APPROVED)
+                    hub_type=HubType.HOUSE, email_verified=True, verification_status=VerificationStatus.APPROVED,
+                    live_until=utcnow() + timedelta(days=30), live_lat=10.8050, live_lon=78.6856)  # live at Cantonment only
         db.add(host)
         db.flush()
         for title, addr, lat, lon, conn, kw, price, af, at in DEMO_CHARGERS:

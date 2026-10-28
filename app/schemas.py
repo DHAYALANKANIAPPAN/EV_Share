@@ -111,6 +111,7 @@ class ChargerOut(ChargerBase, ORM):
     distance_km: float | None = None
     avg_rating: float | None = None
     review_count: int = 0
+    is_live: bool = False  # the hub is live and standing at this charger
 
 
 # ---- bookings ----
@@ -271,3 +272,18 @@ class RemoveOut(BaseModel):
     user: AdminUserOut
     cancelled_bookings: int
     email_sent: bool
+
+
+# ---- hub presence ----
+class LiveIn(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class LiveOut(BaseModel):
+    is_live: bool
+    live_until: datetime | None
+    chargers_live: int
+    chargers_total: int
+    radius_m: int
+    ttl_minutes: int

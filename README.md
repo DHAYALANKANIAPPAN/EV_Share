@@ -132,6 +132,10 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 - The OTP is emailed (`EVSHARE_OTP_PROVIDER=smtp`); in dev it is printed in the server log. Every sign-up and OTP screen shows a notice that EV Share never asks for OTPs by call, text or email.
 - Existing accounts are treated as approved when you upgrade (migration `0002`); accounts that already own chargers become house hubs.
 
+### Hubs: Go live
+
+Approved hubs see a **Go live** bar at the bottom of every page. Pressing it sends the device's location; the hub goes live only if it is within `EVSHARE_LIVE_RADIUS_M` (default 500 m) of one of its chargers, and only those nearby chargers are live. While the page stays open it re-checks the location every 5 minutes; if the pings stop, the hub goes offline `EVSHARE_LIVE_TTL_MINUTES` (default 30) after the last one, and a ping from away from every charger takes it offline immediately. Drivers can only reserve **live** chargers (offline ones are listed as "Hub offline"); bookings that already exist are not affected. `GET /chargers?live_only=true` returns just the live ones.
+
 ### Managing users (reviewer portal)
 
 The portal has two tabs: **Applications** and **Users**. Users lists every driver and hub (search by name or email, filter by type and status). **Remove** asks for a reason, then:

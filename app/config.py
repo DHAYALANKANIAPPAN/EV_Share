@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./evshare.db"
     access_token_minutes: int = 60
     max_booking_hours: int = 8
+    live_ttl_minutes: int = 30  # a hub stays live this long after its last location ping (the page pings every 5 min)
+    live_radius_m: int = 500    # a charger counts as live only if the hub pinged from within this distance
     staff_path: str = "/staff"  # unlinked reviewer portal page; pick something less guessable in production
     login_max_failures: int = 5  # per (client IP, email) within the window
     login_window_minutes: int = 15

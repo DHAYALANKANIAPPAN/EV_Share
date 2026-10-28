@@ -6,13 +6,13 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (register tables)
 from .config import settings
-from .routers import admin, auth, bookings, chargers, payments, reviews, verification
+from .routers import admin, auth, bookings, chargers, hub, payments, reviews, verification
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 # Schema is managed by Alembic: run `alembic upgrade head` (see README).
-app = FastAPI(title="EV Share", description="Peer-to-peer EV charger sharing.", version="0.3.0")
-for r in (auth, verification, admin, chargers, bookings, reviews, payments):
+app = FastAPI(title="EV Share", description="Peer-to-peer EV charger sharing.", version="0.4.0")
+for r in (auth, verification, admin, hub, chargers, bookings, reviews, payments):
     app.include_router(r.router)
 
 

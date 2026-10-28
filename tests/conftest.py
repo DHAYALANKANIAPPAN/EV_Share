@@ -53,6 +53,10 @@ def register_and_login(client, email="a@example.com", name="Asha", password="pas
         with client.session_factory() as db:
             u = db.query(User).filter_by(email=email).one()
             u.verification_status, u.email_verified = VerificationStatus.APPROVED, True
+            if role == "HUB":  # live at CHARGER's location (below), so existing tests can take bookings
+                from datetime import timedelta
+                from app.models import utcnow
+                u.live_until, u.live_lat, u.live_lon = utcnow() + timedelta(days=365), 10.79, 78.70
             db.commit()
     r = client.post("/auth/login", data={"username": email, "password": password})
     client.cookies.clear()  # tests authenticate explicitly with Bearer headers
