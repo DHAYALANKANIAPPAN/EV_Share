@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
 
-const S = { live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
+const S = { orders: { pending: [], upcoming: [], past: [] }, near: null, radius: "10", live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const where = () => new Promise((ok, no) => navigator.geolocation
   ? navigator.geolocation.getCurrentPosition((p) => ok(p.coords), () => no(new Error("We couldn't read your location. Allow location access in your browser, then try again.")), { enableHighAccuracy: true, timeout: 15000 })
@@ -17,6 +17,7 @@ async function syncLive() {
   if (!isHub()) S.live = null; else { try { S.live = await api.liveStatus(); } catch { S.live = null; } }
   const on = !!(S.live && S.live.is_live);
   if (on && !beat) beat = setInterval(heartbeat, 5 * 60 * 1000); else if (!on && beat) { clearInterval(beat); beat = null; }
+  if (isHub() && !orderTimer) { orderTimer = setInterval(pollOrders, 20000); pollOrders(); } else if (!isHub() && orderTimer) { clearInterval(orderTimer); orderTimer = null; }
   renderLiveBar();
 }
 async function heartbeat() {  // re-checks the hub's location while the page is open; going out of range takes the hub offline
@@ -45,39 +46,49 @@ const roleLabel = (u) => `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verificati
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
-  const u = S.user, ok = u && u.verification_status === "APPROVED", plain = u;
-  nav.replaceChildren(...[tab("find", "Find chargers"),
-    plain && ok && u.role === "DRIVER" ? tab("bookings", "My bookings") : null,
-    plain && ok && u.role === "HUB" ? tab("chargers", "My chargers") : null, plain && ok && u.role === "HUB" ? tab("share", "Share a charger") : null,
-    plain && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
+  const u = S.user, ok = u && u.verification_status === "APPROVED", hub = u && u.role === "HUB", n = S.orders.pending.length;
+  nav.replaceChildren(...[!hub ? tab("find", "Find chargers") : null,
+    ok && !hub ? tab("bookings", "My bookings") : null,
+    ok && hub ? tab("orders", n ? `Orders (${n})` : "Orders") : null, ok && hub ? tab("chargers", "My chargers") : null, ok && hub ? tab("share", "Share a charger") : null,
+    u && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
-      h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.view = "find"; renderChrome(); await syncLive(); go("find"); toast("Signed out"); } })]
+      h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.orders = { pending: [], upcoming: [], past: [] }; S.view = "find"; renderChrome(); await syncLive(); go("find"); toast("Signed out"); } })]
     : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => go("register") })]));
   refreshIcons();
 }
 async function go(view) {  // eslint-disable-line
   if (view === "register" && S.user) view = "find";
+  if (S.user && S.user.role === "HUB" && ["find", "bookings"].includes(view)) view = S.user.verification_status === "APPROVED" ? "orders" : "verify";
+  if (S.user && S.user.role === "DRIVER" && ["orders", "chargers", "share"].includes(view)) view = S.user.verification_status === "APPROVED" ? "find" : "verify";
   if (view !== "find" && view !== "register" && !S.user) return openAuth();
   if (view === "share" && S.user.verification_status !== "APPROVED") { toast("Verify your account before sharing a charger.", true); view = "verify"; }
   S.view = view; renderChrome(); render();
   if (view === "verify") await guard(loadVerify)();
   if (view === "bookings") await guard(loadBookings)();
   if (view === "chargers") await guard(loadMine)();
+  if (view === "orders") await guard(loadOrders)();
 }
 
 /* ---------- find: list + map ---------- */
 async function loadChargers() {
   S.loading = true; render();
-  try { S.chargers = await api.chargers(S.f); } finally { S.loading = false; render(); }
+  try { S.chargers = await api.chargers({ ...S.f, near: S.near, radius: S.radius }); } finally { S.loading = false; render(); }
 }
 function filterBar() {
-  const sel = h("select", { id: "f-conn", onchange: (e) => { S.f.connector = e.target.value; guard(loadChargers)(); } }, h("option", { value: "", textContent: "Any" }), CONNECTORS.map((c) => h("option", { value: c, textContent: c.replace("_", " "), selected: S.f.connector === c })));
-  const num = (id, key, min) => h("input", { id, type: "number", min, step: "any", value: S.f[key], placeholder: "No limit", onchange: (e) => { S.f[key] = e.target.value; guard(loadChargers)(); } });
+  const reload = () => guard(loadChargers)();
+  const sel = h("select", { id: "f-conn", onchange: (e) => { S.f.connector = e.target.value; reload(); } }, h("option", { value: "", textContent: "Any" }), CONNECTORS.map((c) => h("option", { value: c, textContent: c.replace("_", " "), selected: S.f.connector === c })));
+  const num = (id, key, min) => h("input", { id, type: "number", min, step: "any", value: S.f[key], placeholder: "No limit", onchange: (e) => { S.f[key] = e.target.value; reload(); } });
   const lab = (id, text, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: text }), el);
-  return h("div", { className: "panel p-4 grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] items-end" },
+  const radius = h("select", { id: "f-radius", onchange: (e) => { S.radius = e.target.value; reload(); } }, ["2", "5", "10", "25", "50"].map((r) => h("option", { value: r, textContent: `${r} km`, selected: S.radius === r })));
+  const nearRow = h("div", { className: "flex flex-wrap items-end gap-3" },
+    h("button", { id: "btn-near", className: "btn " + (S.near ? "" : "btn-primary"), onclick: guard(async () => { const p = await where(); S.near = { lat: p.latitude, lon: p.longitude }; await loadChargers(); }) }, icon("locate-fixed", "size-4"), S.near ? "Update my location" : "Chargers near me"),
+    S.near ? lab("f-radius", "Within", radius) : null,
+    S.near ? h("button", { className: "btn", textContent: "Show all live chargers", onclick: () => { S.near = null; reload(); } }) : null,
+    h("p", { className: "text-sm text-mute" }, S.near ? `Live chargers within ${S.radius} km of you, nearest first.` : "Showing every charger that is live right now."));
+  return h("div", { className: "panel p-4 grid gap-4" }, nearRow, h("div", { className: "grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] items-end" },
     lab("f-conn", "Connector", sel), lab("f-power", "Minimum power (kW)", num("f-power", "power", 1)), lab("f-price", "Maximum price (₹/kWh)", num("f-price", "price", 0)),
-    h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; guard(loadChargers)(); } }));
+    h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; reload(); } })));
 }
 const canReserve = () => !S.user || S.user.role === "DRIVER";
 function chargerRow(c) {
@@ -87,7 +98,7 @@ function chargerRow(c) {
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      canReserve() ? (c.is_live ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Reserve") : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
+      canReserve() ? (c.is_live ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking") : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
 }
 function hl(id) {
   S.on = id;
@@ -130,36 +141,48 @@ function svgMap() {
 }
 function skeleton() { return h("ul", { className: "panel overflow-hidden", "aria-busy": "true" }, [1, 2, 3, 4].map(() => h("li", { className: "row" }, h("div", { className: "grid gap-2" }, h("div", { className: "sk h-4 w-1/2" }), h("div", { className: "sk h-3 w-2/3" }), h("div", { className: "sk h-3 w-1/3" })), h("div", { className: "sk h-11 w-28" })))); }
 function emptyFind() {
+  const msg = filtered() ? ["No live chargers match your filters", "Try a lower power or a higher price limit, or clear the filters."]
+    : S.near ? ["No live chargers near you right now", "Try a wider distance, or show every live charger."] : ["No charger is live right now", "Hubs appear here the moment they go live. Check back soon."];
   return h("section", { className: "panel p-8 grid gap-2 justify-items-start", "aria-labelledby": "e1" }, icon("plug-zap", "size-6 text-mute"),
-    h("h2", { id: "e1", className: "font-semibold text-lg", textContent: filtered() ? "No chargers match your filters" : "No chargers listed yet" }),
-    h("p", { className: "text-sm text-mute", textContent: filtered() ? "Try a lower power or a higher price limit, or reset the filters." : "Chargers shared by hosts show up here as soon as they're listed." }),
+    h("h2", { id: "e1", className: "font-semibold text-lg", textContent: msg[0] }), h("p", { className: "text-sm text-mute", textContent: msg[1] }),
     filtered() ? h("button", { className: "btn mt-2", textContent: "Clear all filters", onclick: () => { S.f = { connector: "", power: "", price: "" }; guard(loadChargers)(); } }) : null);
 }
 function findView() {
   const list = S.loading ? skeleton() : S.chargers.length ? h("ul", { className: "panel overflow-hidden" }, S.chargers.map(chargerRow)) : emptyFind();
   return h("div", { className: "grid gap-6" },
-    h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Find a charger" }), h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Reserve a slot at a home or workplace charger near you, and pay when you book." })),
+    h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Find a live charger" }),
+      h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Only chargers whose hub is live right now are shown. Send a request, the hub accepts it, then you pay and head over." })),
     filterBar(), h("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]" }, list, S.chargers.length && !S.loading ? mapPanel() : null));
 }
 
 /* ---------- bookings ---------- */
 async function loadBookings() { S.loading = true; render(); try { S.bookings = await api.bookings(); } finally { S.loading = false; render(); } }
+const tm = (x) => utc(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 function bookingsView() {
-  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "My bookings" }), h("p", { className: "text-mute mt-1", textContent: "Slots you've reserved, newest first." }));
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "My bookings" }), h("p", { className: "text-mute mt-1", textContent: "Your requests and sessions, newest first." }));
   if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
   if (!S.bookings.length) return h("div", { className: "grid gap-6" }, head, h("section", { className: "panel p-8 grid gap-2 justify-items-start" }, icon("calendar-x", "size-6 text-mute"),
-    h("h2", { className: "font-semibold text-lg", textContent: "No bookings yet" }), h("p", { className: "text-sm text-mute", textContent: "Reserve a charger to see your upcoming and past sessions here." }), h("button", { className: "btn btn-primary mt-2", textContent: "Find chargers", onclick: () => go("find") })));
+    h("h2", { className: "font-semibold text-lg", textContent: "No bookings yet" }), h("p", { className: "text-sm text-mute", textContent: "Find a live charger and send a request to see it here." }), h("button", { className: "btn btn-primary mt-2", textContent: "Find chargers", onclick: () => go("find") })));
   const now = new Date();
   return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.bookings.map((b) => {
-    const cancelled = b.status === "CANCELLED", live = !cancelled && utc(b.end_time) > now, unpaid = !cancelled && b.payment_status !== "PAID";
-    return h("li", { className: "row" }, h("div", { className: "grid gap-1" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
+    const st = b.status, upcoming = utc(b.end_time) > now, paid = b.payment_status === "PAID" || b.estimated_cost <= 0;
+    let ic = "check-circle-2", cls = "text-accent", line = "Confirmed. You can go to the charger.";
+    if (st === "REQUESTED") [ic, cls, line] = ["clock", "text-mute", `Waiting for the hub to accept${b.hold_expires_at ? `. Expected by ${tm(b.hold_expires_at)}` : ""}.`];
+    else if (st === "CONFIRMED" && !paid) [ic, cls, line] = ["wallet", "text-accent", `Accepted by the hub. Pay${b.hold_expires_at ? ` by ${tm(b.hold_expires_at)}` : ""} to confirm your slot.`];
+    else if (st === "DECLINED") [ic, cls, line] = ["x-circle", "text-danger", `Declined by the hub${b.decline_reason ? `: ${b.decline_reason}` : ""}. You were not charged.`];
+    else if (st === "CANCELLED") [ic, cls, line] = ["x-circle", "text-danger", `Cancelled${b.decline_reason ? `: ${b.decline_reason}` : ""}.`];
+    const go_ = st === "CONFIRMED" && paid && upcoming;
+    return h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
-      h("p", { className: "text-sm flex items-center gap-1 " + (cancelled ? "text-danger" : unpaid ? "text-mute" : "text-accent") }, icon(cancelled ? "x-circle" : unpaid ? "clock" : "check-circle-2", "size-4"), h("span", { textContent: cancelled ? "Cancelled" : unpaid ? `Awaiting payment${b.hold_expires_at ? `. Pay by ${utc(b.hold_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} or the slot is released` : ""}` : "Paid and confirmed" }))),
-      h("div", { className: "flex gap-2 items-center flex-wrap" }, !cancelled && !live && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
-        unpaid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete"); await loadBookings(); }) }) : null,
-        live ? h("button", { className: "btn btn-danger", textContent: "Cancel booking", onclick: guard(async () => {
-          if (!(await confirmDialog({ title: `Cancel booking at '${b.charger_title}'?`, body: "A paid booking is refunded in full. This frees the slot for other drivers.", confirm: "Cancel booking", keep: "Keep booking" }))) return;
-          await api.cancel(b.id); toast("Booking cancelled"); await loadBookings(); }) }) : null));
+      h("p", { className: "text-sm flex items-start gap-1 " + cls }, icon(ic, "size-4 mt-0.5 shrink-0"), h("span", { textContent: line })),
+      b.pickup_address ? h("p", { className: "text-sm", textContent: `Where: ${b.pickup_address}` }) : null),
+      h("div", { className: "flex gap-2 items-center flex-wrap self-start" },
+        go_ && b.pickup_latitude != null ? h("a", { className: "btn btn-primary", target: "_blank", rel: "noopener noreferrer", href: `https://www.google.com/maps/dir/?api=1&destination=${b.pickup_latitude},${b.pickup_longitude}` }, icon("navigation", "size-4"), "Directions") : null,
+        st === "CONFIRMED" && !paid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete. You can go to the charger."); await loadBookings(); }) }) : null,
+        st === "CONFIRMED" && !upcoming && paid && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
+        (st === "REQUESTED" || st === "CONFIRMED") && upcoming ? h("button", { className: "btn btn-danger", textContent: st === "REQUESTED" ? "Cancel request" : "Cancel booking", onclick: guard(async () => {
+          if (!(await confirmDialog({ title: `Cancel ${st === "REQUESTED" ? "request" : "booking"} at '${b.charger_title}'?`, body: st === "REQUESTED" ? "The hub will be told. You haven't been charged." : "A paid booking is refunded in full. This frees the slot for other drivers.", confirm: st === "REQUESTED" ? "Cancel request" : "Cancel booking", keep: "Keep it" }))) return;
+          await api.cancel(b.id); toast("Cancelled"); await loadBookings(); }) }) : null));
   })));
 }
 
@@ -186,6 +209,54 @@ function openReviewForm(b) {
     h("div", { className: "field" }, h("label", { htmlFor: "rv-rate", textContent: "Rating" }), rate), h("div", { className: "field" }, h("label", { htmlFor: "rv-note", textContent: "Comment (optional)" }), note),
     h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Discard", onclick: () => d.close() }), h("button", { className: "btn btn-primary", type: "submit", textContent: "Post review" }))));
   d.showModal(); rate.focus();
+}
+
+/* ---------- hub: orders ---------- */
+let orderTimer = null;
+async function loadOrders() {
+  S.loading = true; render();
+  try { const [pending, upcoming, past] = await Promise.all(["pending", "upcoming", "past"].map((x) => api.hubOrders(x))); S.orders = { pending, upcoming, past }; }
+  finally { S.loading = false; render(); renderChrome(); }
+}
+async function pollOrders() {  // quietly checks for new requests while the hub is signed in
+  try {
+    const pending = await api.hubOrders("pending"), before = S.orders.pending.length; S.orders.pending = pending;
+    if (pending.length > before) toast(pending.length - before > 1 ? "New charging requests" : "New charging request");
+    if (S.view === "orders" && !S.loading) { S.orders.upcoming = await api.hubOrders("upcoming"); render(); }
+    if (pending.length !== before) renderChrome();
+  } catch { /* ignore a failed check; the next one will retry */ }
+}
+function ordersView() {
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Orders" }),
+    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Drivers send requests while you're live. Accept one and the driver pays, then comes to you." }));
+  if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
+  const offline = S.live && !S.live.is_live ? h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("radio-tower", "size-5 shrink-0 text-mute"), "You're offline, so drivers can't send new requests. Use Go live at the bottom of the page.") : null;
+  const card = (o, extra, actions) => h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" },
+    h("h3", { className: "font-medium", textContent: `${o.driver_name}${o.driver_vehicle ? `, ${o.driver_vehicle}` : ""}` }),
+    h("p", { className: "text-sm text-mute", textContent: `${o.charger_title}, ${fmtRange(o.start_time, o.end_time)}, ${money(o.estimated_cost)}` }), extra),
+    h("div", { className: "flex gap-2 items-center flex-wrap self-start" }, actions));
+  const block = (title, items, empty, build) => h("section", { className: "grid gap-3" }, h("h2", { className: "font-semibold", textContent: items.length ? `${title} (${items.length})` : title }),
+    items.length ? h("ul", { className: "panel overflow-hidden" }, items.map(build)) : h("p", { className: "text-sm text-mute panel p-4", textContent: empty }));
+  const { pending, upcoming, past } = S.orders;
+  return h("div", { className: "grid gap-6" }, head, offline,
+    block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), `Please answer${o.hold_expires_at ? ` by ${tm(o.hold_expires_at)}` : " soon"}.`), [
+      h("button", { className: "btn btn-primary", textContent: "Accept", onclick: guard(async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
+      h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
+    block("Accepted", upcoming, "Nothing accepted yet.", (o) => card(o, h("p", { className: "text-sm flex items-center gap-1 " + (o.payment_status === "PAID" || o.estimated_cost <= 0 ? "text-accent" : "text-mute") },
+        icon(o.payment_status === "PAID" || o.estimated_cost <= 0 ? "check-circle-2" : "wallet", "size-4"), o.payment_status === "PAID" || o.estimated_cost <= 0 ? "Confirmed. The driver is on the way." : `Waiting for the driver to pay${o.hold_expires_at ? ` (by ${tm(o.hold_expires_at)})` : ""}.`),
+      h("button", { className: "btn btn-danger", textContent: "Cancel order", onclick: guard(async () => {
+        if (!(await confirmDialog({ title: `Cancel ${o.driver_name}'s booking?`, body: "A paid booking is refunded in full and the driver is told.", confirm: "Cancel order", keep: "Keep order" }))) return;
+        await api.cancel(o.id); toast("Order cancelled"); await loadOrders(); }) }))),
+    block("History", past, "Nothing here yet.", (o) => card(o, h("p", { className: "text-sm text-mute", textContent: `${o.status.charAt(0) + o.status.slice(1).toLowerCase()}${o.decline_reason ? `: ${o.decline_reason}` : ""}` }), null)));
+}
+function askDecline(o) {
+  const d = $("#dlg"), opener = document.activeElement, why = h("textarea", { id: "dc-why", maxLength: 300, placeholder: "Optional. e.g. Closed for maintenance today." });
+  d.onclose = () => opener && opener.focus && opener.focus();
+  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => { e.preventDefault(); await api.declineOrder(o.id, why.value); d.close(); toast("Declined. The driver has been told."); await loadOrders(); }) },
+    h("h2", { className: "font-semibold text-lg", textContent: `Decline ${o.driver_name}'s request?` }), h("p", { className: "text-sm text-mute", textContent: "The driver is told it was declined and isn't charged. The slot becomes free again." }),
+    h("div", { className: "field" }, h("label", { htmlFor: "dc-why", textContent: "Reason for the driver (optional)" }), why),
+    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Keep request", onclick: () => d.close() }), h("button", { className: "btn btn-danger", type: "submit", textContent: "Decline request" }))));
+  d.showModal(); why.focus();
 }
 
 /* ---------- owner: my chargers ---------- */
@@ -340,15 +411,14 @@ function openDrawer(c) {
   start.oninput = end.oninput = upd; upd();
   const close = () => { d.dataset.open = "false"; $("#scrim").dataset.open = "false"; document.removeEventListener("keydown", key); opener && opener.focus && opener.focus(); };
   const key = (e) => { if (e.key === "Escape") close(); if (e.key === "Tab") { const f = [...d.querySelectorAll("button,input")].filter((x) => !x.disabled); const i = f.indexOf(document.activeElement); if (e.shiftKey && i <= 0) { e.preventDefault(); f.at(-1).focus(); } else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); } } };
-  const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "Reserve and pay" });
+  const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "Send request" });
   const form = h("form", { className: "grid gap-4 p-6", onsubmit: guard(async (e) => {
-    e.preventDefault(); submit.disabled = true; submit.textContent = "Reserving…"; submit.setAttribute("aria-busy", "true");
-    try { const b = await api.book(c.id, new Date(start.value).toISOString(), new Date(end.value).toISOString()); let paid = true; await api.pay(b.id).catch((er) => { paid = false; toast(er.message, true); }); close();
-      toast(paid ? "Booked and paid. See it under My bookings." : "Slot reserved. Finish paying from My bookings before the hold ends."); }
-    finally { submit.disabled = false; submit.textContent = "Reserve and pay"; submit.removeAttribute("aria-busy"); } }) },
+    e.preventDefault(); submit.disabled = true; submit.textContent = "Sending…"; submit.setAttribute("aria-busy", "true");
+    try { await api.book(c.id, new Date(start.value).toISOString(), new Date(end.value).toISOString()); close(); toast("Request sent. The hub will answer soon, and you pay once it accepts."); await go("bookings"); }
+    finally { submit.disabled = false; submit.textContent = "Send request"; submit.removeAttribute("aria-busy"); } }) },
     h("div", {}, h("h2", { className: "text-xl font-semibold", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.address}. ${c.power_kw} kW, ${money(c.price_per_kwh)}/kWh. ${windowText(c)}.` })),
     h("div", { className: "field" }, h("label", { htmlFor: "d-start", textContent: "Start" }), start), h("div", { className: "field" }, h("label", { htmlFor: "d-end", textContent: "End" }), end), est,
-    h("p", { className: "text-xs text-mute", textContent: "The price assumes the charger runs at full power for the whole slot. Times use your local timezone." }),
+    h("p", { className: "text-xs text-mute", textContent: "The hub has to accept your request first, and you only pay after that. The price assumes the charger runs at full power for the whole slot. Times use your local timezone." }),
     h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Discard", onclick: close }), submit));
   d.replaceChildren(h("div", { className: "flex justify-end p-2 border-b border-line" }, h("button", { className: "ibtn", type: "button", "aria-label": "Close panel", dataset: { tip: "Close panel" }, onclick: close }, icon("x", "size-5"))), form);
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
@@ -372,8 +442,9 @@ function openAuth() {
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView }[S.view]()); refreshIcons(); }
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
-  renderChrome(); await syncLive(); await guard(loadChargers)();
+  renderChrome(); await syncLive();
+  if (S.user && S.user.role === "HUB") await go("find"); else await guard(loadChargers)();
 })();

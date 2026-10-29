@@ -132,6 +132,14 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 - The OTP is emailed (`EVSHARE_OTP_PROVIDER=smtp`); in dev it is printed in the server log. Every sign-up and OTP screen shows a notice that EV Share never asks for OTPs by call, text or email.
 - Existing accounts are treated as approved when you upgrade (migration `0002`); accounts that already own chargers become house hubs.
 
+### How a booking works
+
+1. A **driver** sees only chargers whose hub is **live now** (optionally "Chargers near me", nearest first) and sends a **request** for a time slot. The slot is held.
+2. The **hub** sees it under **Orders** (new requests are checked every 20 s and counted in the menu) and **accepts or declines** within `EVSHARE_HUB_RESPONSE_MINUTES` (default 20), otherwise the request is cancelled. Both sides are emailed.
+3. After acceptance the driver sees the exact address and a **Directions** link and **pays** within `EVSHARE_UNPAID_HOLD_MINUTES` (default 15), otherwise the slot is released. Declined or cancelled requests are never charged; paid cancellations are refunded.
+
+Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar); drivers only get **Find chargers and My bookings**.
+
 ### Hubs: Go live
 
 Approved hubs see a **Go live** bar at the bottom of every page. Pressing it sends the device's location; the hub goes live only if it is within `EVSHARE_LIVE_RADIUS_M` (default 500 m) of one of its chargers, and only those nearby chargers are live. While the page stays open it re-checks the location every 5 minutes; if the pings stop, the hub goes offline `EVSHARE_LIVE_TTL_MINUTES` (default 30) after the last one, and a ping from away from every charger takes it offline immediately. Drivers can only reserve **live** chargers (offline ones are listed as "Hub offline"); bookings that already exist are not affected. `GET /chargers?live_only=true` returns just the live ones.

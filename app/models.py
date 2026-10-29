@@ -24,7 +24,9 @@ class ConnectorType(str, enum.Enum):
 
 
 class BookingStatus(str, enum.Enum):
-    CONFIRMED = "CONFIRMED"
+    REQUESTED = "REQUESTED"   # driver asked; the hub has not answered yet (the slot is held)
+    CONFIRMED = "CONFIRMED"   # the hub accepted; the driver pays, then can go
+    DECLINED = "DECLINED"     # the hub said no
     CANCELLED = "CANCELLED"
 
 
@@ -161,11 +163,14 @@ class Booking(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     start_time: Mapped[datetime] = mapped_column(DateTime)
     end_time: Mapped[datetime] = mapped_column(DateTime)
-    status: Mapped[BookingStatus] = mapped_column(Enum(BookingStatus), default=BookingStatus.CONFIRMED)
+    status: Mapped[BookingStatus] = mapped_column(Enum(BookingStatus), default=BookingStatus.REQUESTED)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # why it was declined or cancelled by the system
     estimated_cost: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     charger: Mapped[Charger] = relationship()
+    driver: Mapped[User] = relationship(foreign_keys=[user_id])
     payment: Mapped["Payment | None"] = relationship(back_populates="booking", uselist=False)
     review: Mapped["Review | None"] = relationship(back_populates="booking", uselist=False)
 
@@ -175,11 +180,34 @@ class Booking(Base):
 
     @property
     def hold_expires_at(self) -> datetime | None:
-        """When an unpaid booking will be released; None once paid, free or cancelled."""
+        """Deadline of the current stage: the hub's answer while REQUESTED, the driver's payment once CONFIRMED."""
+        if self.status == BookingStatus.REQUESTED:
+            return self.created_at + timedelta(minutes=settings.hub_response_minutes) if settings.hub_response_minutes > 0 else None
         if (self.status != BookingStatus.CONFIRMED or self.estimated_cost <= 0 or settings.unpaid_hold_minutes <= 0
                 or (self.payment and self.payment.status == PaymentStatus.PAID)):
             return None
-        return self.created_at + timedelta(minutes=settings.unpaid_hold_minutes)
+        return (self.accepted_at or self.created_at) + timedelta(minutes=settings.unpaid_hold_minutes)
+
+    # the exact location is only shown to the driver once the hub has accepted
+    @property
+    def pickup_address(self) -> str | None:
+        return self.charger.address if self.status == BookingStatus.CONFIRMED else None
+
+    @property
+    def pickup_latitude(self) -> float | None:
+        return self.charger.latitude if self.status == BookingStatus.CONFIRMED else None
+
+    @property
+    def pickup_longitude(self) -> float | None:
+        return self.charger.longitude if self.status == BookingStatus.CONFIRMED else None
+
+    @property
+    def driver_name(self) -> str:
+        return self.driver.name
+
+    @property
+    def driver_vehicle(self) -> str | None:
+        return self.driver.vehicle_number
 
     @property
     def charger_title(self) -> str:

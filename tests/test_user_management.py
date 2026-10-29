@@ -5,7 +5,7 @@ import pytest
 from app.routers import admin as admin_mod
 from app.services.mailer import MailError
 
-from .conftest import CHARGER, register_and_login
+from .conftest import CHARGER, accept, register_and_login
 from .test_verification import make_admin
 
 
@@ -21,9 +21,10 @@ def slot(hours=3):
     return s.isoformat(), (s + timedelta(hours=1)).isoformat()
 
 
-def book_and_pay(client, driver, charger_id):
+def book_and_pay(client, driver, charger_id, host):
     s, e = slot()
     b = client.post("/bookings", json={"charger_id": charger_id, "start_time": s, "end_time": e}, headers=driver).json()
+    accept(client, host, b["id"])
     client.post("/payments/checkout", json={"booking_id": b["id"]}, headers=driver)
     client.post("/payments/confirm", json={"booking_id": b["id"]}, headers=driver)
     return b["id"]
@@ -52,7 +53,7 @@ def test_removing_a_driver_blocks_login_cancels_and_refunds_and_emails(client, m
     host = register_and_login(client)
     cid = client.post("/chargers", json=CHARGER, headers=host).json()["id"]
     driver = register_and_login(client, "b@example.com", "Bala")
-    bid = book_and_pay(client, driver, cid)
+    bid = book_and_pay(client, driver, cid, host)
     admin = make_admin(client)
     driver_id = uid(client, driver)
 
@@ -82,7 +83,7 @@ def test_removing_a_hub_hides_its_chargers_and_cancels_bookings_on_them(client, 
     host = register_and_login(client)
     cid = client.post("/chargers", json=CHARGER, headers=host).json()["id"]
     driver = register_and_login(client, "b@example.com", "Bala")
-    book_and_pay(client, driver, cid)
+    book_and_pay(client, driver, cid, host)
     admin = make_admin(client)
     assert len(client.get("/chargers").json()) == 1
     r = client.post(f"/admin/users/{uid(client, host)}/remove", json={"reason": "Property papers are not valid"}, headers=admin)
