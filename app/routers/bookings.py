@@ -11,6 +11,7 @@ from ..services.availability import fits_window, window_label
 from ..services.expiry import expire_unpaid
 from ..services.bookings import cancel_with_refund
 from ..services.live import charger_is_live
+from ..services.notify import notify
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -39,7 +40,7 @@ def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
     clash = db.scalar(
         select(Booking.id).where(
             Booking.charger_id == charger.id,
-            Booking.status == BookingStatus.CONFIRMED,
+            Booking.status.in_([BookingStatus.REQUESTED, BookingStatus.CONFIRMED]),
             Booking.start_time < body.end_time,
             Booking.end_time > body.start_time,
         ).limit(1)
@@ -50,10 +51,12 @@ def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
     hours = duration.total_seconds() / 3600
     # Slot price: charger running at full power for the whole slot (no metering yet).
     cost = round(charger.power_kw * hours * charger.price_per_kwh, 2)
-    booking = Booking(charger_id=charger.id, user_id=user.id, start_time=body.start_time,
-                      end_time=body.end_time, estimated_cost=cost)
+    booking = Booking(charger_id=charger.id, user_id=user.id, start_time=body.start_time, end_time=body.end_time,
+                      estimated_cost=cost, status=BookingStatus.REQUESTED)
     db.add(booking)
     db.commit()
+    notify(charger.owner.email, "New charging request on EV Share",
+           f"{user.name} asked to use '{charger.title}'. Open EV Share > Orders to accept or decline within {settings.hub_response_minutes} minutes.")
     return booking
 
 
@@ -82,8 +85,8 @@ def cancel_booking(booking_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
     if user.id not in (booking.user_id, booking.charger.owner_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to cancel this booking")
-    if booking.status == BookingStatus.CANCELLED:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Booking already cancelled")
+    if booking.status not in (BookingStatus.REQUESTED, BookingStatus.CONFIRMED):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This booking is already closed.")
 
     cancel_with_refund(booking)
     db.commit()

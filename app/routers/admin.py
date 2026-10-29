@@ -82,7 +82,7 @@ def remove_user(user_id: int, body: RemoveIn, db: DB, admin: AdminUser):
     user = _target(db, user_id, admin)
     if not user.is_active:
         raise HTTPException(status.HTTP_409_CONFLICT, "This account is already removed.")
-    upcoming = db.scalars(select(Booking).where(Booking.status == BookingStatus.CONFIRMED, Booking.end_time > utcnow(),
+    upcoming = db.scalars(select(Booking).where(Booking.status.in_([BookingStatus.REQUESTED, BookingStatus.CONFIRMED]), Booking.end_time > utcnow(),
                                                 (Booking.user_id == user.id) | Booking.charger.has(Charger.owner_id == user.id))).all()
     for booking in upcoming:  # one at a time: if the payment gateway fails, a retry carries on where this stopped
         cancel_with_refund(booking)

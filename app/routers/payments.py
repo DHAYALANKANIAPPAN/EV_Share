@@ -15,6 +15,8 @@ def _own_booking(db, booking_id: int, user) -> Booking:
     booking = db.get(Booking, booking_id)
     if not booking or booking.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
+    if booking.status == BookingStatus.REQUESTED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The hub hasn't accepted this request yet. You can pay once it does.")
     if booking.status != BookingStatus.CONFIRMED:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This booking was cancelled or its payment window ended. Reserve the slot again.")
     return booking

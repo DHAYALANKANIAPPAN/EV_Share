@@ -65,3 +65,10 @@ def register_and_login(client, email="a@example.com", name="Asha", password="pas
 
 CHARGER = {"title": "Home Type2", "address": "12 Main St", "latitude": 10.79, "longitude": 78.70,
            "connector_type": "TYPE2", "power_kw": 7.4, "price_per_kwh": 10}
+
+
+def accept(client, host_headers, booking_id):
+    """The hub accepts a driver's request (drivers can only pay after this)."""
+    r = client.post(f"/hub/orders/{booking_id}/accept", headers=host_headers)
+    assert r.status_code == 200, r.text
+    return r.json()

@@ -140,6 +140,10 @@ class BookingOut(ORM):
     payment_status: str
     reviewed: bool
     hold_expires_at: datetime | None = None
+    decline_reason: str | None = None
+    pickup_address: str | None = None      # only after the hub accepted
+    pickup_latitude: float | None = None
+    pickup_longitude: float | None = None
 
 
 # ---- reviews ----
@@ -287,3 +291,24 @@ class LiveOut(BaseModel):
     chargers_total: int
     radius_m: int
     ttl_minutes: int
+
+
+# ---- hub orders ----
+class HubOrderOut(ORM):
+    id: int
+    charger_id: int
+    charger_title: str
+    driver_name: str
+    driver_vehicle: str | None
+    start_time: datetime
+    end_time: datetime
+    status: BookingStatus
+    payment_status: str
+    estimated_cost: float
+    hold_expires_at: datetime | None
+    decline_reason: str | None
+    created_at: datetime
+
+
+class DeclineIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)
