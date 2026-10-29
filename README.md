@@ -1,5 +1,13 @@
 # ⚡ EV Share
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/DHAYALANKANIAPPAN/badge.svg)](https://hub.xerj.org/contributors/DHAYALANKANIAPPAN)
+[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Corpus](https://img.shields.io/badge/XERJ_Corpus_Hub-Selected_Reference-8A2BE2)](https://hub.xerj.org/corpus/dhayalankaniappan--ev-share)
+
+Peer-to-peer EV charger sharing. Owners list a home or workplace charger; drivers find one on a map, book a slot, pay, and review it afterwards.
+
+> **Selected for XERJ Corpus Hub**: The UI redesign and architecture implementation of EV_Share has been selected as an open reference implementation for AI coding agents. View the indexed corpus entry on [XERJ Corpus Hub](https://hub.xerj.org/corpus/dhayalankaniappan--ev-share).
 Peer-to-peer EV charger sharing. Owners list a home or workplace charger; drivers find one on a map, book a slot, pay, and review it afterwards.
 
 ## Features
