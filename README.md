@@ -146,6 +146,8 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 2. The **hub** sees it under **Orders** (new requests are checked every 20 s and counted in the menu) and **accepts or declines** within `EVSHARE_HUB_RESPONSE_MINUTES` (default 20), otherwise the request is cancelled. Both sides are emailed.
 3. After acceptance the driver sees the exact address and a **Directions** link and **pays** within `EVSHARE_UNPAID_HOLD_MINUTES` (default 15), otherwise the slot is released. Declined or cancelled requests are never charged; paid cancellations are refunded.
 
+4. During the session the hub's Orders page shows it under **In progress** and the driver's bookings show **Session in progress**. Either side can **end the session** when charging is done: the booking becomes *Completed*, the rest of the slot is freed, and the driver can leave a review. While a session runs the charger shows **In use until ...** to other drivers. A driver holds **one open booking at a time** (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1): they can book again once it is finished, cancelled or declined.
+
 Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar); drivers only get **Find chargers and My bookings**.
 
 ### Hubs: Go live

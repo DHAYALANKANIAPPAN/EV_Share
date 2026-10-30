@@ -67,7 +67,7 @@ def orders(db: DB, user: ApprovedHub, scope: Literal["pending", "upcoming", "pas
     elif scope == "upcoming":
         stmt = stmt.where(Booking.status == BookingStatus.CONFIRMED, Booking.end_time > now).order_by(Booking.start_time)
     else:
-        stmt = stmt.where(or_(Booking.end_time <= now, Booking.status.in_([BookingStatus.DECLINED, BookingStatus.CANCELLED]))).order_by(Booking.start_time.desc()).limit(50)
+        stmt = stmt.where(or_(Booking.end_time <= now, Booking.status.in_([BookingStatus.DECLINED, BookingStatus.CANCELLED, BookingStatus.COMPLETED]))).order_by(Booking.start_time.desc()).limit(50)
     return db.scalars(stmt).all()
 
 

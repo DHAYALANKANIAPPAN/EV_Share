@@ -24,6 +24,8 @@ export const api = {
   liveStatus: () => call("/hub/live"),
   goLive: (latitude, longitude) => call("/hub/live", { method: "POST", body: { latitude, longitude } }),
   goOffline: () => call("/hub/offline", { method: "POST" }),
+  finish: (id) => call(`/bookings/${id}/finish`, { method: "POST" }),
+  busy: (id) => call(`/chargers/${id}/busy`),
   hubOrders: (scope) => call(`/hub/orders?scope=${scope}`),
   acceptOrder: (id) => call(`/hub/orders/${id}/accept`, { method: "POST" }),
   declineOrder: (id, reason) => call(`/hub/orders/${id}/decline`, { method: "POST", body: { reason: reason || null } }),

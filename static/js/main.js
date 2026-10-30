@@ -68,10 +68,13 @@ async function go(view) {  // eslint-disable-line
   if (view === "bookings") await guard(loadBookings)();
   if (view === "chargers") await guard(loadMine)();
   if (view === "orders") await guard(loadOrders)();
+  if (view === "find") await guard(loadChargers)();  // always show fresh availability
 }
 
 /* ---------- find: list + map ---------- */
+const activeBooking = () => S.bookings.find((b) => ["REQUESTED", "CONFIRMED"].includes(b.status) && utc(b.end_time) > new Date());
 async function loadChargers() {
+  if (S.user && S.user.role === "DRIVER" && S.user.verification_status === "APPROVED") { try { S.bookings = await api.bookings(); } catch { /* the banner is optional */ } }
   S.loading = true; render();
   try { S.chargers = await api.chargers({ ...S.f, near: S.near, radius: S.radius }); } finally { S.loading = false; render(); }
 }
@@ -92,7 +95,7 @@ function filterBar() {
 }
 const canReserve = () => !S.user || S.user.role === "DRIVER";
 function chargerRow(c) {
-  const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }), h("span", { className: c.is_live ? "text-accent font-medium" : "", textContent: c.is_live ? "● Live now" : "Offline" }));
+  const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }), h("span", { className: c.is_live ? "text-accent font-medium" : "", textContent: c.is_live ? "● Live now" : "Offline" }), c.busy_until ? h("span", { className: "text-amber-500 font-medium", textContent: `In use until ${tm(c.busy_until)}` }) : null);
   const rating = c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} (${c.review_count})`;
   return h("li", { className: "row", dataset: { on: String(S.on === c.id), id: c.id }, onmouseenter: () => hl(c.id), onmouseleave: () => hl(null) },
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
@@ -152,6 +155,8 @@ function findView() {
   return h("div", { className: "grid gap-6" },
     h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Find a live charger" }),
       h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Only chargers whose hub is live right now are shown. Send a request, the hub accepts it, then you pay and head over." })),
+    activeBooking() ? h("div", { className: "panel p-4 flex gap-3 items-center flex-wrap text-sm", role: "note" }, icon("info", "size-5 shrink-0 text-accent"),
+      h("span", { className: "flex-1", textContent: `You have an open booking at ${activeBooking().charger_title}. Finish or cancel it before booking another charger.` }), h("button", { className: "btn", textContent: "View booking", onclick: () => go("bookings") })) : null,
     filterBar(), h("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]" }, list, S.chargers.length && !S.loading ? mapPanel() : null));
 }
 
@@ -171,6 +176,9 @@ function bookingsView() {
     else if (st === "CONFIRMED" && !paid) [ic, cls, line] = ["wallet", "text-accent", `Accepted by the hub. Pay${b.hold_expires_at ? ` by ${tm(b.hold_expires_at)}` : ""} to confirm your slot.`];
     else if (st === "DECLINED") [ic, cls, line] = ["x-circle", "text-danger", `Declined by the hub${b.decline_reason ? `: ${b.decline_reason}` : ""}. You were not charged.`];
     else if (st === "CANCELLED") [ic, cls, line] = ["x-circle", "text-danger", `Cancelled${b.decline_reason ? `: ${b.decline_reason}` : ""}.`];
+    else if (st === "COMPLETED") [ic, cls, line] = ["check-circle-2", "text-mute", "Completed. The charger is free for others."];
+    const running = st === "CONFIRMED" && paid && utc(b.start_time) <= now && upcoming;
+    if (running) [ic, cls, line] = ["zap", "text-accent", `Session in progress until ${tm(b.end_time)}.`];
     const go_ = st === "CONFIRMED" && paid && upcoming;
     return h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
@@ -179,8 +187,11 @@ function bookingsView() {
       h("div", { className: "flex gap-2 items-center flex-wrap self-start" },
         go_ && b.pickup_latitude != null ? h("a", { className: "btn btn-primary", target: "_blank", rel: "noopener noreferrer", href: `https://www.google.com/maps/dir/?api=1&destination=${b.pickup_latitude},${b.pickup_longitude}` }, icon("navigation", "size-4"), "Directions") : null,
         st === "CONFIRMED" && !paid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete. You can go to the charger."); await loadBookings(); }) }) : null,
-        st === "CONFIRMED" && !upcoming && paid && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
-        (st === "REQUESTED" || st === "CONFIRMED") && upcoming ? h("button", { className: "btn btn-danger", textContent: st === "REQUESTED" ? "Cancel request" : "Cancel booking", onclick: guard(async () => {
+        running ? h("button", { className: "btn", textContent: "End session", onclick: guard(async () => {
+          if (!(await confirmDialog({ title: `End your session at '${b.charger_title}'?`, body: "Use this when you've finished charging. The charger becomes free for other drivers.", confirm: "End session", keep: "Keep charging" }))) return;
+          await api.finish(b.id); toast("Session ended. Thanks for charging!"); await loadBookings(); }) }) : null,
+        (st === "COMPLETED" || (st === "CONFIRMED" && !upcoming && paid)) && !b.reviewed ? h("button", { className: "btn", textContent: "Leave a review", onclick: () => openReviewForm(b) }) : null,
+        (st === "REQUESTED" || st === "CONFIRMED") && upcoming && !running ? h("button", { className: "btn btn-danger", textContent: st === "REQUESTED" ? "Cancel request" : "Cancel booking", onclick: guard(async () => {
           if (!(await confirmDialog({ title: `Cancel ${st === "REQUESTED" ? "request" : "booking"} at '${b.charger_title}'?`, body: st === "REQUESTED" ? "The hub will be told. You haven't been charged." : "A paid booking is refunded in full. This frees the slot for other drivers.", confirm: st === "REQUESTED" ? "Cancel request" : "Cancel booking", keep: "Keep it" }))) return;
           await api.cancel(b.id); toast("Cancelled"); await loadBookings(); }) }) : null));
   })));
@@ -237,11 +248,17 @@ function ordersView() {
     h("div", { className: "flex gap-2 items-center flex-wrap self-start" }, actions));
   const block = (title, items, empty, build) => h("section", { className: "grid gap-3" }, h("h2", { className: "font-semibold", textContent: items.length ? `${title} (${items.length})` : title }),
     items.length ? h("ul", { className: "panel overflow-hidden" }, items.map(build)) : h("p", { className: "text-sm text-mute panel p-4", textContent: empty }));
-  const { pending, upcoming, past } = S.orders;
+  const { pending, past } = S.orders, nowD = new Date();
+  const isPaid = (o) => o.payment_status === "PAID" || o.estimated_cost <= 0;
+  const running = S.orders.upcoming.filter((o) => isPaid(o) && utc(o.start_time) <= nowD), upcoming = S.orders.upcoming.filter((o) => !running.includes(o));
   return h("div", { className: "grid gap-6" }, head, offline,
     block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), `Please answer${o.hold_expires_at ? ` by ${tm(o.hold_expires_at)}` : " soon"}.`), [
       h("button", { className: "btn btn-primary", textContent: "Accept", onclick: guard(async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
       h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
+    running.length ? block("In progress", running, "", (o) => card(o, h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("zap", "size-4"), `Charging until ${tm(o.end_time)}.`),
+      h("button", { className: "btn", textContent: "Mark session done", onclick: guard(async () => {
+        if (!(await confirmDialog({ title: `Finish ${o.driver_name}'s session?`, body: "The charger becomes free for other drivers straight away.", confirm: "Mark done", keep: "Keep charging" }))) return;
+        await api.finish(o.id); toast("Session finished. The charger is free."); await loadOrders(); }) }))) : null,
     block("Accepted", upcoming, "Nothing accepted yet.", (o) => card(o, h("p", { className: "text-sm flex items-center gap-1 " + (o.payment_status === "PAID" || o.estimated_cost <= 0 ? "text-accent" : "text-mute") },
         icon(o.payment_status === "PAID" || o.estimated_cost <= 0 ? "check-circle-2" : "wallet", "size-4"), o.payment_status === "PAID" || o.estimated_cost <= 0 ? "Confirmed. The driver is on the way." : `Waiting for the driver to pay${o.hold_expires_at ? ` (by ${tm(o.hold_expires_at)})` : ""}.`),
       h("button", { className: "btn btn-danger", textContent: "Cancel order", onclick: guard(async () => {
@@ -407,6 +424,8 @@ function openDrawer(c) {
   if (!c.is_live) return toast("This hub is offline right now. Try again when it's live.", true);
   const opener = document.activeElement, d = $("#drawer"), s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 2);
   const start = h("input", { id: "d-start", type: "datetime-local", required: true, value: local(s) }), end = h("input", { id: "d-end", type: "datetime-local", required: true, value: local(new Date(s.getTime() + 36e5)) });
+  const busyBox = h("div", { className: "text-sm text-mute", "aria-live": "polite" });
+  api.busy(c.id).then((slots) => { busyBox.replaceChildren(...(slots.length ? [h("p", { className: "font-medium text-ink", textContent: "Already taken" }), h("ul", { className: "grid gap-1" }, slots.map((x) => h("li", { textContent: `${fmtRange(x.start_time, x.end_time)}${x.in_progress ? " (in use now)" : ""}` })))] : [h("p", { textContent: "No other bookings in the next 7 days." })])); }).catch(() => {});
   const est = h("p", { className: "text-lg font-semibold" }), upd = () => { const hrs = (new Date(end.value) - new Date(start.value)) / 36e5; est.textContent = hrs > 0 ? `Up to ${money(c.power_kw * hrs * c.price_per_kwh)} for ${+hrs.toFixed(1)} h` : ""; };
   start.oninput = end.oninput = upd; upd();
   const close = () => { d.dataset.open = "false"; $("#scrim").dataset.open = "false"; document.removeEventListener("keydown", key); opener && opener.focus && opener.focus(); };
@@ -417,7 +436,7 @@ function openDrawer(c) {
     try { await api.book(c.id, new Date(start.value).toISOString(), new Date(end.value).toISOString()); close(); toast("Request sent. The hub will answer soon, and you pay once it accepts."); await go("bookings"); }
     finally { submit.disabled = false; submit.textContent = "Send request"; submit.removeAttribute("aria-busy"); } }) },
     h("div", {}, h("h2", { className: "text-xl font-semibold", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.address}. ${c.power_kw} kW, ${money(c.price_per_kwh)}/kWh. ${windowText(c)}.` })),
-    h("div", { className: "field" }, h("label", { htmlFor: "d-start", textContent: "Start" }), start), h("div", { className: "field" }, h("label", { htmlFor: "d-end", textContent: "End" }), end), est,
+    h("div", { className: "field" }, h("label", { htmlFor: "d-start", textContent: "Start" }), start), h("div", { className: "field" }, h("label", { htmlFor: "d-end", textContent: "End" }), end), busyBox, est,
     h("p", { className: "text-xs text-mute", textContent: "The hub has to accept your request first, and you only pay after that. The price assumes the charger runs at full power for the whole slot. Times use your local timezone." }),
     h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Discard", onclick: close }), submit));
   d.replaceChildren(h("div", { className: "flex justify-end p-2 border-b border-line" }, h("button", { className: "ibtn", type: "button", "aria-label": "Close panel", dataset: { tip: "Close panel" }, onclick: close }, icon("x", "size-5"))), form);
