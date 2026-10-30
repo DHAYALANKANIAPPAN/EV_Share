@@ -112,6 +112,7 @@ class ChargerOut(ChargerBase, ORM):
     avg_rating: float | None = None
     review_count: int = 0
     is_live: bool = False  # the hub is live and standing at this charger
+    busy_until: datetime | None = None  # an accepted session is running right now until this time
 
 
 # ---- bookings ----
@@ -312,3 +313,9 @@ class HubOrderOut(ORM):
 
 class DeclineIn(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
+
+
+class BusySlot(BaseModel):
+    start_time: datetime
+    end_time: datetime
+    in_progress: bool

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     staff_path: str = "/staff"  # unlinked reviewer portal page; pick something less guessable in production
     login_max_failures: int = 5  # per (client IP, email) within the window
     login_window_minutes: int = 15
+    max_active_bookings: int = 1  # open requests/sessions a driver may hold at once; 0 = no limit
     hub_response_minutes: int = 20  # a booking request the hub has not answered in this time is cancelled; 0 disables
     unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
     default_timezone: str = "Asia/Kolkata"

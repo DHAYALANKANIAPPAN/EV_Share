@@ -26,6 +26,7 @@ class ConnectorType(str, enum.Enum):
 class BookingStatus(str, enum.Enum):
     REQUESTED = "REQUESTED"   # driver asked; the hub has not answered yet (the slot is held)
     CONFIRMED = "CONFIRMED"   # the hub accepted; the driver pays, then can go
+    COMPLETED = "COMPLETED"   # the session happened and was marked done; the charger is free again
     DECLINED = "DECLINED"     # the hub said no
     CANCELLED = "CANCELLED"
 

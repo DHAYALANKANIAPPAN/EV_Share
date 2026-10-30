@@ -1,9 +1,11 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from ..deps import DB, ApprovedHub, CurrentUser
-from ..models import Charger, ConnectorType, Review, User, VerificationStatus
-from ..schemas import ChargerCreate, ChargerOut, ChargerUpdate, _check_window
+from ..models import Booking, BookingStatus, Charger, ConnectorType, Review, User, VerificationStatus, utcnow
+from ..schemas import BusySlot, ChargerCreate, ChargerOut, ChargerUpdate, _check_window
 from ..services.geo import bounding_box, haversine_km
 from ..services.live import charger_is_live
 
@@ -27,12 +29,19 @@ def to_out(db, chargers: list[Charger], distances: dict[int, float] | None = Non
             .where(Review.charger_id.in_(ids)).group_by(Review.charger_id)
         ).all()
         ratings = {cid: (round(float(avg), 2), n) for cid, avg, n in rows}
+    busy = {}
+    if ids:
+        now = utcnow()
+        busy = dict(db.execute(select(Booking.charger_id, func.max(Booking.end_time)).where(
+            Booking.charger_id.in_(ids), Booking.status == BookingStatus.CONFIRMED,
+            Booking.start_time <= now, Booking.end_time > now).group_by(Booking.charger_id)).all())
     out = []
     for c in chargers:
         o = ChargerOut.model_validate(c)
         o.distance_km = (distances or {}).get(c.id)
         o.avg_rating, o.review_count = ratings.get(c.id, (None, 0))
         o.is_live = charger_is_live(c)
+        o.busy_until = busy.get(c.id)
         out.append(o)
     return out
 
@@ -103,6 +112,17 @@ def my_chargers(db: DB, user: CurrentUser):
 @router.get("/{charger_id}", response_model=ChargerOut)
 def get_charger(charger_id: int, db: DB):
     return to_out(db, [_get_or_404(db, charger_id)])[0]
+
+
+@router.get("/{charger_id}/busy", response_model=list[BusySlot])
+def busy_slots(charger_id: int, db: DB):
+    """Times this charger is already taken (requested or accepted), next 7 days. No personal details."""
+    _get_or_404(db, charger_id)
+    now = utcnow()
+    rows = db.scalars(select(Booking).where(
+        Booking.charger_id == charger_id, Booking.status.in_([BookingStatus.REQUESTED, BookingStatus.CONFIRMED]),
+        Booking.end_time > now, Booking.start_time < now + timedelta(days=7)).order_by(Booking.start_time)).all()
+    return [BusySlot(start_time=b.start_time, end_time=b.end_time, in_progress=b.start_time <= now) for b in rows]
 
 
 @router.patch("/{charger_id}", response_model=ChargerOut)

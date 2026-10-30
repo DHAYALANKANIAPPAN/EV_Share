@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..config import settings
 from ..deps import DB, ApprovedDriver, CurrentUser
@@ -32,6 +32,11 @@ def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Charger not found or not available")
     if charger.owner_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot book your own charger")
+    if settings.max_active_bookings > 0:
+        active = db.scalar(select(func.count(Booking.id)).where(
+            Booking.user_id == user.id, Booking.status.in_([BookingStatus.REQUESTED, BookingStatus.CONFIRMED]), Booking.end_time > utcnow()))
+        if active >= settings.max_active_bookings:
+            raise HTTPException(status.HTTP_409_CONFLICT, "You already have an active booking. Finish or cancel it before booking another.")
     if not charger_is_live(charger):
         raise HTTPException(status.HTTP_409_CONFLICT, "This hub is offline right now and can't take new bookings. Try again when it's live.")
     if not fits_window(charger, body.start_time, body.end_time):
@@ -89,5 +94,26 @@ def cancel_booking(booking_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_409_CONFLICT, "This booking is already closed.")
 
     cancel_with_refund(booking)
+    db.commit()
+    return booking
+
+
+@router.post("/{booking_id}/finish", response_model=BookingOut)
+def finish_session(booking_id: int, db: DB, user: CurrentUser):
+    """Mark a running session as done (by the driver or the hub). The charger becomes free for other drivers straight away."""
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
+    if user.id not in (booking.user_id, booking.charger.owner_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to finish this session")
+    if booking.status != BookingStatus.CONFIRMED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only an accepted booking can be marked as done.")
+    now = utcnow()
+    if booking.start_time > now:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This session hasn't started yet. Cancel it instead if you no longer need it.")
+    if booking.estimated_cost > 0 and booking.payment_status != "PAID":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This booking hasn't been paid yet.")
+    booking.status = BookingStatus.COMPLETED
+    booking.end_time = min(booking.end_time, now)  # frees whatever was left of the slot
     db.commit()
     return booking

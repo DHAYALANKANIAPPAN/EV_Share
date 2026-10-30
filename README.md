@@ -146,6 +146,8 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 2. The **hub** sees it under **Orders** (new requests are checked every 20 s and counted in the menu) and **accepts or declines** within `EVSHARE_HUB_RESPONSE_MINUTES` (default 20), otherwise the request is cancelled. Both sides are emailed.
 3. After acceptance the driver sees the exact address and a **Directions** link and **pays** within `EVSHARE_UNPAID_HOLD_MINUTES` (default 15), otherwise the slot is released. Declined or cancelled requests are never charged; paid cancellations are refunded.
 
+4. During the session the hub's Orders page shows it under **In progress** and the driver's bookings show **Session in progress**. Either side can **end the session** when charging is done: the booking becomes *Completed*, the rest of the slot is freed, and the driver can leave a review. While a session runs the charger shows **In use until ...** to other drivers. A driver holds **one open booking at a time** (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1): they can book again once it is finished, cancelled or declined.
+
 Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar); drivers only get **Find chargers and My bookings**.
 
 ### Hubs: Go live
@@ -168,6 +170,10 @@ The portal has two tabs: **Applications** and **Users**. Users lists every drive
 - **Login attempts are limited** per (IP, email): 5 failures in 15 minutes returns 429. The counter lives in memory, so use Redis or a database table if you run several instances.
 - Standard headers are set on every response (`nosniff`, `X-Frame-Options: DENY`, referrer and permissions policies, HSTS outside dev).
 - Not done yet: email verification and password reset (they need an email provider), a Content-Security-Policy (the page currently loads Tailwind from a CDN), registration throttling.
+
+## Front-end notes
+
+`static/css/app.css` holds the design tokens (light and dark colours as CSS variables), then buttons, forms, rows, status pills, drawer/dialog/toast styles and animations, in numbered sections. Tailwind utilities (CDN build, settings in `static/js/tailwind-config.js`) handle layout. Live countdowns and progress bars come from one shared timer in `static/js/ui.js`, and animations switch off for people who prefer reduced motion. The CDN Tailwind build is fine for development; compile it before a high-traffic launch.
 
 ## Known limitations
 

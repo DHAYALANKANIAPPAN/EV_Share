@@ -13,8 +13,8 @@ def create_review(body: ReviewCreate, db: DB, user: CurrentUser):
     booking = db.get(Booking, body.booking_id)
     if not booking or booking.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
-    if booking.status != BookingStatus.CONFIRMED:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cancelled bookings cannot be reviewed")
+    if booking.status not in (BookingStatus.CONFIRMED, BookingStatus.COMPLETED):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only a session that took place can be reviewed")
     if booking.end_time > utcnow():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You can review a charger after your booking has ended")
     if booking.review:
