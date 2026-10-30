@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { $, h, icon, refreshIcons, toast } from "./ui.js";
+import { $, h, icon, refreshIcons, toast, pill } from "./ui.js";
 
 const S = { user: null, queue: [], loading: false, tab: "apps", users: { items: [], total: 0 }, f: { role: "", state: "all", q: "" } };
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
@@ -21,7 +21,7 @@ function loginView() {
 }
 
 const tabs = () => h("div", { className: "flex gap-1 border-b border-line", role: "tablist" }, [["apps", "Applications"], ["users", "Users"]].map(([id, t]) =>
-  h("button", { role: "tab", "aria-selected": String(S.tab === id), className: "btn border-transparent rounded-b-none " + (S.tab === id ? "text-accent border-b-accent" : "text-mute"), textContent: t,
+  h("button", { role: "tab", "aria-selected": String(S.tab === id), className: "tab" + (S.tab === id ? " is-active" : ""), textContent: t,
     onclick: async () => { S.tab = id; id === "users" ? await loadUsers() : await load(); } })));
 
 async function load() { S.loading = true; render(); try { S.queue = await api.adminQueue(); } finally { S.loading = false; render(); } }
@@ -56,7 +56,7 @@ async function loadUsers(more = false) {
   if (!more) { S.loading = true; render(); }
   try { const r = await api.adminUsers(p); S.users = more ? { items: [...S.users.items, ...r.items], total: r.total } : r; } finally { S.loading = false; render(); }
 }
-const badge = (t, cls = "") => h("span", { className: "text-xs px-2 py-0.5 rounded-full border " + (cls || "border-line text-mute"), textContent: t });
+const badge = (t, cls = "") => pill(t, cls.includes("accent") ? "ok" : cls.includes("danger") ? "danger" : "");
 function usersView() {
   const sel = (id, label, opts, key) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: label }), h("select", { id, onchange: guard(async (e) => { S.f[key] = e.target.value; await loadUsers(); }) },
     opts.map(([v, t]) => h("option", { value: v, textContent: t, selected: S.f[key] === v }))));

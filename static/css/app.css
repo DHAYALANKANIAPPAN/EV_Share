@@ -1,0 +1,126 @@
+/* EV Share UI. Plain CSS (Tailwind utilities are layered on top via the CDN build).
+   Sections: 1 tokens · 2 base · 3 surfaces · 4 buttons · 5 forms · 6 lists · 7 status · 8 overlays · 9 motion · 10 map */
+
+/* 1 ── design tokens (space-separated RGB so Tailwind can add opacity) ─────────────── */
+:root {
+  --canvas: 250 250 250; --panel: 255 255 255; --line: 228 228 231;
+  --ink: 24 24 27;       --mute: 100 100 110;
+  --accent: 4 120 87;    --onaccent: 255 255 255;
+  --danger: 185 28 28;   --warn: 180 83 9;
+  --radius: 12px; --radius-sm: 8px;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+.dark {
+  --canvas: 9 9 11;      --panel: 20 20 23;   --line: 42 42 48;
+  --ink: 244 244 245;    --mute: 161 161 170;
+  --accent: 52 211 153;  --onaccent: 4 30 20;
+  --danger: 248 113 113; --warn: 251 191 36;
+}
+
+/* 2 ── base ───────────────────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+body { font-family: Geist, system-ui, sans-serif; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
+::selection { background: rgb(var(--accent) / .25); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* 3 ── surfaces ───────────────────────────────────────────────────────────────── */
+.topbar { background: rgb(var(--panel) / .85); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); }
+.panel { background: rgb(var(--panel)); border: 1px solid rgb(var(--line)); border-radius: var(--radius); }
+.dark .panel { box-shadow: inset 0 1px 0 rgb(255 255 255 / .04); }
+.icon-badge { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: rgb(var(--canvas)); border: 1px solid rgb(var(--line)); color: rgb(var(--mute)); }
+
+/* 4 ── buttons ────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border-radius: var(--radius-sm); border: 1px solid rgb(var(--line)); font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: border-color .15s, background-color .15s, opacity .15s, transform .12s var(--ease);
+}
+.btn:hover { border-color: rgb(var(--mute)); background: rgb(var(--canvas)); }
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .5; pointer-events: none; }
+.btn-primary { background: rgb(var(--accent)); border-color: rgb(var(--accent)); color: rgb(var(--onaccent)); }
+.btn-primary:hover { background: rgb(var(--accent)); border-color: rgb(var(--accent)); opacity: .9; }
+.btn-danger { color: rgb(var(--danger)); border-color: rgb(var(--danger) / .6); }
+.btn-danger:hover { border-color: rgb(var(--danger)); background: rgb(var(--danger) / .08); }
+.btn[aria-busy="true"] { pointer-events: none; opacity: .75; }
+.btn[aria-busy="true"]::before {            /* spinner while an action is running */
+  content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite;
+}
+.ibtn { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-sm); border: 1px solid transparent; color: rgb(var(--mute)); cursor: pointer; transition: color .15s, border-color .15s; }
+.ibtn:hover { color: rgb(var(--ink)); border-color: rgb(var(--line)); }
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; white-space: nowrap;
+  padding: 4px 8px; border-radius: 6px; font-size: 12px; background: rgb(var(--ink)); color: rgb(var(--canvas));
+}
+
+/* main navigation */
+.tab { position: relative; min-height: 44px; padding: 0 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; color: rgb(var(--mute)); background: none; border: 0; cursor: pointer; white-space: nowrap; transition: color .15s, background-color .15s; }
+.tab:hover { color: rgb(var(--ink)); background: rgb(var(--canvas)); }
+.tab::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 4px; height: 2px; border-radius: 2px; background: rgb(var(--accent)); transform: scaleX(0); transition: transform .25s var(--ease); }
+.tab.is-active { color: rgb(var(--accent)); }
+.tab.is-active::after { transform: scaleX(1); }
+
+/* 5 ── forms ──────────────────────────────────────────────────────────────────── */
+.field { display: grid; gap: 4px; font-size: 14px; font-weight: 500; }
+.field input, .field select, .field textarea {
+  width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid rgb(var(--line)); border-radius: var(--radius-sm);
+  background: rgb(var(--canvas)); color: rgb(var(--ink)); font-weight: 400; transition: border-color .15s, box-shadow .15s;
+}
+.field textarea { padding: 8px 12px; min-height: 88px; }
+.field input:hover, .field select:hover, .field textarea:hover { border-color: rgb(var(--mute)); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .18); outline: none; }
+
+/* 6 ── lists and rows ─────────────────────────────────────────────────────────── */
+.row { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 16px; border-top: 1px solid rgb(var(--line)); transition: background-color .15s, box-shadow .15s; }
+.row:first-child { border-top: 0; }
+.row:hover, .row[data-on="true"] { background: rgb(var(--canvas)); box-shadow: inset 3px 0 0 rgb(var(--accent)); }
+@media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+
+/* 7 ── status: pills, chips, countdowns, progress ─────────────────────────────── */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid rgb(var(--line)); font-size: 12px; font-weight: 500; line-height: 1.6; white-space: nowrap; color: rgb(var(--mute)); }
+.pill-ok { color: rgb(var(--accent)); border-color: rgb(var(--accent) / .45); background: rgb(var(--accent) / .08); }
+.pill-warn { color: rgb(var(--warn)); border-color: rgb(var(--warn) / .45); background: rgb(var(--warn) / .08); }
+.pill-danger { color: rgb(var(--danger)); border-color: rgb(var(--danger) / .45); background: rgb(var(--danger) / .08); }
+.pill-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--accent)); animation: pulse 1.8s ease-out infinite; }
+.chip { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 6px; background: rgb(var(--canvas)); border: 1px solid rgb(var(--line)); font-size: 12px; color: rgb(var(--ink)); }
+.countdown { font-variant-numeric: tabular-nums; font-weight: 600; }
+.countdown[data-urgent="true"] { color: rgb(var(--warn)); }
+.progress { height: 6px; border-radius: 999px; background: rgb(var(--line)); overflow: hidden; }
+.progress > span { display: block; height: 100%; border-radius: inherit; background: rgb(var(--accent)); transition: width 1s linear; }
+.live-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: rgb(var(--line)); }
+.live-dot.on { background: rgb(var(--accent)); animation: pulse 1.8s ease-out infinite; }
+
+/* 8 ── overlays: drawer, scrim, dialog, toasts ────────────────────────────────── */
+.drawer { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(440px, 100%); background: rgb(var(--panel)); border-left: 1px solid rgb(var(--line)); visibility: hidden; opacity: 0; transform: translateX(100%); transition: transform .25s var(--ease), opacity .2s, visibility .25s; overflow-y: auto; }
+.drawer[data-open="true"] { visibility: visible; opacity: 1; transform: none; }
+.scrim { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / .4); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.scrim[data-open="true"] { opacity: 1; pointer-events: auto; }
+dialog { width: min(420px, 92vw); padding: 24px; border: 1px solid rgb(var(--line)); border-radius: var(--radius); background: rgb(var(--panel)); color: rgb(var(--ink)); }
+dialog[open] { animation: pop .18s var(--ease); }
+dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius); background: rgb(var(--panel)); border: 1px solid rgb(var(--line)); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 14px; animation: rise .25s var(--ease); }
+.toast-err { border-color: rgb(var(--danger) / .6); }
+.toast-err > i { color: rgb(var(--danger)); }
+.toast > i { color: rgb(var(--accent)); flex: none; margin-top: 2px; }
+.toast button { margin-left: auto; color: rgb(var(--mute)); }
+.has-livebar main { padding-bottom: 8rem; }
+.has-livebar #toasts { bottom: 6rem; }
+
+/* 9 ── motion ─────────────────────────────────────────────────────────────────── */
+.view-enter { animation: rise .28s var(--ease); }
+.sk { border-radius: 6px; background: linear-gradient(90deg, rgb(var(--line)) 25%, rgb(var(--line) / .45) 50%, rgb(var(--line)) 75%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(var(--accent) / .55); } 70%, 100% { box-shadow: 0 0 0 8px rgb(var(--accent) / 0); } }
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: opacity .1s !important; transform: none !important; scroll-behavior: auto !important; }
+}
+
+/* 10 ── map markers ───────────────────────────────────────────────────────────── */
+.evpin { width: 28px; height: 28px; border-radius: 50%; background: rgb(var(--accent)); border: 3px solid rgb(var(--panel)); outline: 1px solid rgb(var(--accent)); transition: transform .15s; animation: pulse 2s ease-out infinite; }
+.evpin[data-on="true"] { transform: scale(1.3); }
+.pin { cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform .15s; }
+.pin:hover, .pin[data-on="true"] { transform: scale(1.25); }

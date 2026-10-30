@@ -1,11 +1,12 @@
 import { api } from "./api.js";
-import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog } from "./ui.js";
+import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog, pill, chip, progress, countdown, startTicker, busy } from "./ui.js";
 
 const S = { orders: { pending: [], upcoming: [], past: [] }, near: null, radius: "10", live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const where = () => new Promise((ok, no) => navigator.geolocation
   ? navigator.geolocation.getCurrentPosition((p) => ok(p.coords), () => no(new Error("We couldn't read your location. Allow location access in your browser, then try again.")), { enableHighAccuracy: true, timeout: 15000 })
   : no(new Error("This browser can't share your location.")));
+const act = (label, fn) => (e) => busy(e.currentTarget, label, () => guard(fn)());  // spinner on the clicked button
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 const filtered = () => S.f.connector || S.f.power || S.f.price;
 const windowText = (c) => (c.available_from && c.available_to ? `Open ${c.available_from.slice(0, 5)} to ${c.available_to.slice(0, 5)}` : "Open 24/7");
@@ -36,7 +37,7 @@ function renderLiveBar() {
     } finally { await syncLive(); refreshView(); } }) });
   const at = live ? utc(L.live_until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
   bar.replaceChildren(h("div", { className: "mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap" },
-    h("p", { className: "text-sm flex items-center gap-2" }, h("span", { className: "inline-block size-3 rounded-full " + (live ? "bg-accent" : "bg-line"), "aria-hidden": "true" }),
+    h("p", { className: "text-sm flex items-center gap-2" }, h("span", { className: "live-dot" + (live ? " on" : ""), "aria-hidden": "true" }),
       live ? `You're live. ${L.chargers_live} of ${L.chargers_total} chargers are taking orders. Keep this page open; you'll go offline at ${at} if it stops updating.`
            : "You're offline. Go live when you're at your charger to start receiving charging orders."), btn));
 }
@@ -45,7 +46,7 @@ function renderLiveBar() {
 const roleLabel = (u) => `${u.role === "HUB" ? "Hub" : "Driver"}, ${u.verification_status === "APPROVED" ? "verified" : u.verification_status === "PENDING" ? "under review" : "not verified"}`;
 function renderChrome() {
   const nav = $("#nav"), user = $("#user");
-  const tab = (id, label) => h("button", { className: "btn border-transparent " + (S.view === id ? "text-accent" : "text-mute"), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
+  const tab = (id, label) => h("button", { className: "tab" + (S.view === id ? " is-active" : ""), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
   const u = S.user, ok = u && u.verification_status === "APPROVED", hub = u && u.role === "HUB", n = S.orders.pending.length;
   nav.replaceChildren(...[!hub ? tab("find", "Find chargers") : null,
     ok && !hub ? tab("bookings", "My bookings") : null,
@@ -95,7 +96,8 @@ function filterBar() {
 }
 const canReserve = () => !S.user || S.user.role === "DRIVER";
 function chargerRow(c) {
-  const meta = h("p", { className: "text-sm text-mute flex flex-wrap gap-x-4 gap-y-1" }, h("span", { textContent: c.connector_type.replace("_", " ") }), h("span", { textContent: `${c.power_kw} kW` }), h("span", { textContent: `${money(c.price_per_kwh)}/kWh` }), h("span", { textContent: windowText(c) }), h("span", { className: c.is_live ? "text-accent font-medium" : "", textContent: c.is_live ? "● Live now" : "Offline" }), c.busy_until ? h("span", { className: "text-amber-500 font-medium", textContent: `In use until ${tm(c.busy_until)}` }) : null);
+  const meta = h("div", { className: "flex flex-wrap items-center gap-2" }, chip(c.connector_type.replace("_", " ")), chip(`${c.power_kw} kW`), chip(`${money(c.price_per_kwh)}/kWh`), chip(windowText(c)),
+    c.is_live ? pill("Live now", "ok live") : pill("Offline"), c.busy_until ? pill(`In use until ${tm(c.busy_until)}`, "warn", "zap") : null);
   const rating = c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} (${c.review_count})`;
   return h("li", { className: "row", dataset: { on: String(S.on === c.id), id: c.id }, onmouseenter: () => hl(c.id), onmouseleave: () => hl(null) },
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
@@ -172,21 +174,24 @@ function bookingsView() {
   return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.bookings.map((b) => {
     const st = b.status, upcoming = utc(b.end_time) > now, paid = b.payment_status === "PAID" || b.estimated_cost <= 0;
     let ic = "check-circle-2", cls = "text-accent", line = "Confirmed. You can go to the charger.";
-    if (st === "REQUESTED") [ic, cls, line] = ["clock", "text-mute", `Waiting for the hub to accept${b.hold_expires_at ? `. Expected by ${tm(b.hold_expires_at)}` : ""}.`];
-    else if (st === "CONFIRMED" && !paid) [ic, cls, line] = ["wallet", "text-accent", `Accepted by the hub. Pay${b.hold_expires_at ? ` by ${tm(b.hold_expires_at)}` : ""} to confirm your slot.`];
+    if (st === "REQUESTED") [ic, cls, line] = ["clock", "text-mute", "Waiting for the hub to accept."];
+    else if (st === "CONFIRMED" && !paid) [ic, cls, line] = ["wallet", "text-accent", "Accepted by the hub. Pay to confirm your slot."];
     else if (st === "DECLINED") [ic, cls, line] = ["x-circle", "text-danger", `Declined by the hub${b.decline_reason ? `: ${b.decline_reason}` : ""}. You were not charged.`];
     else if (st === "CANCELLED") [ic, cls, line] = ["x-circle", "text-danger", `Cancelled${b.decline_reason ? `: ${b.decline_reason}` : ""}.`];
     else if (st === "COMPLETED") [ic, cls, line] = ["check-circle-2", "text-mute", "Completed. The charger is free for others."];
     const running = st === "CONFIRMED" && paid && utc(b.start_time) <= now && upcoming;
     if (running) [ic, cls, line] = ["zap", "text-accent", `Session in progress until ${tm(b.end_time)}.`];
     const go_ = st === "CONFIRMED" && paid && upcoming;
-    return h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium", textContent: b.charger_title }),
+    const tone = running ? "ok live" : st === "REQUESTED" ? "" : st === "CONFIRMED" ? (paid ? "ok" : "warn") : st === "COMPLETED" ? "" : "danger";
+    const label = running ? "In progress" : st === "REQUESTED" ? "Waiting" : st === "CONFIRMED" ? (paid ? "Confirmed" : "Pay now") : st[0] + st.slice(1).toLowerCase();
+    return h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" }, h("div", { className: "flex items-center gap-2 flex-wrap" }, h("h3", { className: "font-medium", textContent: b.charger_title }), pill(label, tone)),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
-      h("p", { className: "text-sm flex items-start gap-1 " + cls }, icon(ic, "size-4 mt-0.5 shrink-0"), h("span", { textContent: line })),
+      h("p", { className: "text-sm flex items-start gap-1 " + cls }, icon(ic, "size-4 mt-0.5 shrink-0"), h("span", {}, line, b.hold_expires_at && (st === "REQUESTED" || (st === "CONFIRMED" && !paid)) ? [st === "REQUESTED" ? " Answer expected within " : " Pay within ", countdown(b.hold_expires_at), "."] : null)),
+      running ? progress(b.start_time, b.end_time) : null,
       b.pickup_address ? h("p", { className: "text-sm", textContent: `Where: ${b.pickup_address}` }) : null),
       h("div", { className: "flex gap-2 items-center flex-wrap self-start" },
         go_ && b.pickup_latitude != null ? h("a", { className: "btn btn-primary", target: "_blank", rel: "noopener noreferrer", href: `https://www.google.com/maps/dir/?api=1&destination=${b.pickup_latitude},${b.pickup_longitude}` }, icon("navigation", "size-4"), "Directions") : null,
-        st === "CONFIRMED" && !paid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: guard(async () => { await api.pay(b.id); toast("Payment complete. You can go to the charger."); await loadBookings(); }) }) : null,
+        st === "CONFIRMED" && !paid ? h("button", { className: "btn btn-primary", textContent: "Pay now", onclick: act("Opening payment…", async () => { await api.pay(b.id); toast("Payment complete. You can go to the charger."); await loadBookings(); }) }) : null,
         running ? h("button", { className: "btn", textContent: "End session", onclick: guard(async () => {
           if (!(await confirmDialog({ title: `End your session at '${b.charger_title}'?`, body: "Use this when you've finished charging. The charger becomes free for other drivers.", confirm: "End session", keep: "Keep charging" }))) return;
           await api.finish(b.id); toast("Session ended. Thanks for charging!"); await loadBookings(); }) }) : null,
@@ -252,15 +257,15 @@ function ordersView() {
   const isPaid = (o) => o.payment_status === "PAID" || o.estimated_cost <= 0;
   const running = S.orders.upcoming.filter((o) => isPaid(o) && utc(o.start_time) <= nowD), upcoming = S.orders.upcoming.filter((o) => !running.includes(o));
   return h("div", { className: "grid gap-6" }, head, offline,
-    block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), `Please answer${o.hold_expires_at ? ` by ${tm(o.hold_expires_at)}` : " soon"}.`), [
-      h("button", { className: "btn btn-primary", textContent: "Accept", onclick: guard(async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
+    block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), h("span", {}, "Please answer within ", o.hold_expires_at ? countdown(o.hold_expires_at) : "a few minutes", ".")), [
+      h("button", { className: "btn btn-primary", textContent: "Accept", onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
       h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
-    running.length ? block("In progress", running, "", (o) => card(o, h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("zap", "size-4"), `Charging until ${tm(o.end_time)}.`),
+    running.length ? block("In progress", running, "", (o) => card(o, h("div", { className: "grid gap-2" }, h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("zap", "size-4"), `Charging until ${tm(o.end_time)}.`), progress(o.start_time, o.end_time)),
       h("button", { className: "btn", textContent: "Mark session done", onclick: guard(async () => {
         if (!(await confirmDialog({ title: `Finish ${o.driver_name}'s session?`, body: "The charger becomes free for other drivers straight away.", confirm: "Mark done", keep: "Keep charging" }))) return;
         await api.finish(o.id); toast("Session finished. The charger is free."); await loadOrders(); }) }))) : null,
     block("Accepted", upcoming, "Nothing accepted yet.", (o) => card(o, h("p", { className: "text-sm flex items-center gap-1 " + (o.payment_status === "PAID" || o.estimated_cost <= 0 ? "text-accent" : "text-mute") },
-        icon(o.payment_status === "PAID" || o.estimated_cost <= 0 ? "check-circle-2" : "wallet", "size-4"), o.payment_status === "PAID" || o.estimated_cost <= 0 ? "Confirmed. The driver is on the way." : `Waiting for the driver to pay${o.hold_expires_at ? ` (by ${tm(o.hold_expires_at)})` : ""}.`),
+        icon(o.payment_status === "PAID" || o.estimated_cost <= 0 ? "check-circle-2" : "wallet", "size-4"), o.payment_status === "PAID" || o.estimated_cost <= 0 ? "Confirmed. The driver is on the way." : h("span", {}, "Waiting for the driver to pay", o.hold_expires_at ? [" (", countdown(o.hold_expires_at), " left)"] : null, ".")),
       h("button", { className: "btn btn-danger", textContent: "Cancel order", onclick: guard(async () => {
         if (!(await confirmDialog({ title: `Cancel ${o.driver_name}'s booking?`, body: "A paid booking is refunded in full and the driver is told.", confirm: "Cancel order", keep: "Keep order" }))) return;
         await api.cancel(o.id); toast("Order cancelled"); await loadOrders(); }) }))),
@@ -387,9 +392,9 @@ function verifyView() {
   const emailStep = step("Step 2 of 4: Confirm your email", false, v.email_verified
     ? h("p", { className: "text-sm flex items-center gap-2 text-accent" }, icon("check-circle-2", "size-4"), `${S.user.email} is confirmed.`)
     : h("div", { className: "grid gap-3" }, h("p", { className: "text-sm text-mute", textContent: `We'll email a 6-digit code to ${S.user.email}. It expires in 10 minutes.` }),
-        h("div", { className: "flex gap-2 flex-wrap items-end" }, h("button", { className: "btn", textContent: "Email me a code", onclick: guard(async () => { await api.sendCode(); toast("Code sent. Check your inbox."); $("#v-code").focus(); }) }),
+        h("div", { className: "flex gap-2 flex-wrap items-end" }, h("button", { className: "btn", textContent: "Email me a code", onclick: act("Sending…", async () => { await api.sendCode(); toast("Code sent. Check your inbox."); $("#v-code").focus(); }) }),
           h("div", { className: "field" }, h("label", { htmlFor: "v-code", textContent: "Enter the code" }), code),
-          h("button", { className: "btn btn-primary", textContent: "Confirm code", onclick: guard(async () => { await api.confirmCode(code.value.trim()); toast("Email confirmed"); await loadVerify(); await refreshUser(); }) }))));
+          h("button", { className: "btn btn-primary", textContent: "Confirm code", onclick: act("Checking…", async () => { await api.confirmCode(code.value.trim()); toast("Email confirmed"); await loadVerify(); await refreshUser(); }) }))));
   const car = h("input", { id: "v-car", value: (v.vehicle_number || "").toUpperCase(), disabled: locked, placeholder: "TN45AB1234", maxLength: 20, autocapitalize: "characters", spellcheck: false, className: "uppercase tracking-wide",
     oninput: (e) => { const at = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(at, at); } });
   const docRows = h("ul", { className: "panel overflow-hidden" }, v.required.map((r) => h("li", { className: "row" },
@@ -461,7 +466,8 @@ function openAuth() {
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.classList.remove("view-enter"); void m.offsetWidth; m.classList.add("view-enter"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView }[S.view]()); refreshIcons(); }
+startTicker(() => setTimeout(() => { if (S.view === "bookings") guard(loadBookings)(); else if (S.view === "orders") guard(loadOrders)(); else if (S.view === "find") guard(loadChargers)(); }, 1200));
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
   renderChrome(); await syncLive();

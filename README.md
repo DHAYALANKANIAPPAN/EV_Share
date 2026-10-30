@@ -171,6 +171,10 @@ The portal has two tabs: **Applications** and **Users**. Users lists every drive
 - Standard headers are set on every response (`nosniff`, `X-Frame-Options: DENY`, referrer and permissions policies, HSTS outside dev).
 - Not done yet: email verification and password reset (they need an email provider), a Content-Security-Policy (the page currently loads Tailwind from a CDN), registration throttling.
 
+## Front-end notes
+
+`static/css/app.css` holds the design tokens (light and dark colours as CSS variables), then buttons, forms, rows, status pills, drawer/dialog/toast styles and animations, in numbered sections. Tailwind utilities (CDN build, settings in `static/js/tailwind-config.js`) handle layout. Live countdowns and progress bars come from one shared timer in `static/js/ui.js`, and animations switch off for people who prefer reduced motion. The CDN Tailwind build is fine for development; compile it before a high-traffic launch.
+
 ## Known limitations
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
