@@ -57,11 +57,11 @@ static/
   js/ui.js           helpers: DOM builder, toasts, countdowns, progress, confirm dialog
   js/tailwind-config.js
   app.js, style.css, classic.html   OLD interface, kept at /classic only; safe to delete
-tests/               65 tests (see section 6)
+tests/               72 tests (see section 6)
 docs/SELF_HOSTING.md how to run it on a server with Docker
 .github/workflows/   ci.yml (tests + migration checks on SQLite and Postgres), release.yml (tests, Docker image, GitHub release on tags)
 Dockerfile, docker-compose.prod.yml, .dockerignore
-requirements.txt, requirements-dev.txt, requirements-postgres.txt, requirements-s3.txt
+requirements.txt, requirements-dev.txt, requirements-postgres.txt, requirements-s3.txt, requirements-redis.txt
 .env.example, README.md, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md
 ```
 
@@ -178,6 +178,7 @@ ENV (dev|production), SECRET_KEY, DATABASE_URL, ACCESS_TOKEN_MINUTES (60), MAX_B
 | test_hub_live.py | 5 | offline hubs refuse bookings; must be at the charger to go live; only nearby chargers are live; live expires without pings; only approved hubs can go live |
 | test_hub_orders.py | 4 | request → accept → pay with emails; decline frees the slot; only the owning hub can answer, once; cancel and refund rules |
 | test_lifecycle.py | 5 | running session makes the charger busy until finished; hub or driver can finish, outsiders can't; can't finish early or unpaid; review after completion; one open booking per driver |
+| test_ratelimit_redis.py | 7 | Redis-backed sliding window login limit; isolation; multi-worker coordination; reset |
 | test_security.py | 7 | HttpOnly cookie; CSRF header required for cookie writes; Bearer exempt; logout ends session; login lockout; failed count resets on success; security headers |
 | test_staff_portal.py | 10 | portal page noindex and unlinked; two entrances enforced; shared failed-login limit; unsafe portal paths rejected |
 | test_storage.py | 3 | local storage round trip; S3 (mocked with moto) stores only ciphertext and deletes replaced files; retention rules delete only the right documents |
@@ -197,17 +198,17 @@ ENV (dev|production), SECRET_KEY, DATABASE_URL, ACCESS_TOKEN_MINUTES (60), MAX_B
 8. **Branch `feature/ui-polish`:** stylesheet split into `static/css/app.css`, status pills, countdowns, progress bars, spinners, animations, reduced-motion support.
 9. **Branch `feature/document-storage`:** S3 or local storage, encrypted; automatic retention and `scripts.purge_documents`.
 10. **Branch `chore/releases`:** release workflow (tests, Docker image to GHCR, GitHub release on tags), Dependabot, production compose file, self-hosting guide, CONTRIBUTING, SECURITY, CHANGELOG.
-11. **External:** the project is listed on the XERJ Corpus Hub as a *corpus contributor*, not a code contributor to XERJ.
+11. **Branch `fix/shared-login-limit`:** Redis-backed sliding-window login rate limiting (`RedisLoginLimiter`) across processes and servers, configurable via `EVSHARE_RATELIMIT_BACKEND=redis` and `EVSHARE_REDIS_URL`, backed by `fakeredis` in dev/tests, Redis container in docker compose.
+12. **External:** the project is listed on the XERJ Corpus Hub as a *corpus contributor*, not a code contributor to XERJ.
 
 ## 8. Still to do (in priority order)
 1. **Real-browser check:** all screens have only been tested in jsdom. Walk through every flow once in Chrome/Firefox, on a phone-width screen too.
 2. **Email provider:** choose one (for example Resend, SendGrid, Amazon SES or Gmail SMTP) and set the `EVSHARE_SMTP_*` values. Production refuses the console OTP provider.
 3. **Run the release pipeline:** push a tag, confirm the image builds and pushes to GHCR, make the package public, and check the release page. Expect small fixes.
 4. **Run the Docker stack on a server** end to end, including `scripts.purge_documents` on a schedule and database backups.
-5. **Shared login limit:** the failed-login counter is in memory. Move it to Redis or the database before running several app instances.
+5. **Email verification for password reset:** there is no "forgot password" yet.
 6. **Content Security Policy:** compile Tailwind and vendor Leaflet/Tailwind so the page can use a strict CSP.
-7. **Email verification for password reset:** there is no "forgot password" yet.
-8. **Metered billing:** charge by energy delivered, not the flat slot estimate. Needs decisions on tariffs and how the hub reports energy.
+7. **Metered billing:** charge by energy delivered, not the flat slot estimate. Needs decisions on tariffs and how the hub reports energy.
 9. **Host payouts:** split the payment between platform and hub. Needs commission rules, Razorpay Route or Payouts setup, and tax and KYC decisions.
 10. **Real-time updates:** replace the 20-second order polling and the 30-second busy checks with server-sent events or WebSockets.
 11. **Notifications:** push or SMS for new requests (SMS needs a registered provider in India).

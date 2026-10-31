@@ -1,4 +1,4 @@
-# Run EV Share with Postgres:  docker compose -f docker-compose.prod.yml up -d
+# Run EV Share with Postgres and Redis:  docker compose -f docker-compose.prod.yml up -d
 # Needs a .env file next to this one (copy .env.example and fill it in; see docs/SELF_HOSTING.md).
 services:
   db:
@@ -15,17 +15,31 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   app:
     image: ghcr.io/dhayalankaniappan/ev_share:latest   # replace with a version tag such as :0.1.0 to pin it
     restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
+      redis: { condition: service_healthy }
     env_file: .env
     environment:
       EVSHARE_DATABASE_URL: postgresql+psycopg://evshare:${POSTGRES_PASSWORD}@db:5432/evshare
+      EVSHARE_RATELIMIT_BACKEND: redis
+      EVSHARE_REDIS_URL: redis://redis:6379/0
     ports: ["8000:8000"]
     volumes: ["uploads:/app/uploads"]   # only used when EVSHARE_STORAGE_BACKEND=local
 
 volumes:
   pgdata:
+  redisdata:
   uploads:

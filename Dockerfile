@@ -3,8 +3,8 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-COPY requirements.txt requirements-postgres.txt requirements-s3.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-postgres.txt -r requirements-s3.txt
+COPY requirements.txt requirements-postgres.txt requirements-s3.txt requirements-redis.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-postgres.txt -r requirements-s3.txt -r requirements-redis.txt
 
 COPY . .
 RUN useradd --create-home app && chown -R app /app

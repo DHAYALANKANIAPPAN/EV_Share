@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     staff_path: str = "/staff"  # unlinked reviewer portal page; pick something less guessable in production
     login_max_failures: int = 5  # per (client IP, email) within the window
     login_window_minutes: int = 15
+    ratelimit_backend: str = "memory"  # memory | redis (multi-instance/production)
+    redis_url: str = ""
     max_active_bookings: int = 1  # open requests/sessions a driver may hold at once; 0 = no limit
     hub_response_minutes: int = 20  # a booking request the hub has not answered in this time is cancelled; 0 disables
     unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
@@ -83,6 +85,10 @@ class Settings(BaseSettings):
                 Fernet(self.docs_encryption_key.encode())
             except Exception:
                 raise ValueError("EVSHARE_DOCS_ENCRYPTION_KEY must be a valid Fernet key when EVSHARE_ENV is not 'dev'")
+        if self.ratelimit_backend not in ("memory", "redis"):
+            raise ValueError("EVSHARE_RATELIMIT_BACKEND must be 'memory' or 'redis'")
+        if self.ratelimit_backend == "redis" and not self.redis_url:
+            raise ValueError("Redis rate limiting selected but EVSHARE_REDIS_URL is not set")
         if self.payment_provider not in ("mock", "razorpay"):
             raise ValueError("EVSHARE_PAYMENT_PROVIDER must be 'mock' or 'razorpay'")
         if self.payment_provider == "razorpay" and not (self.razorpay_key_id and self.razorpay_key_secret):

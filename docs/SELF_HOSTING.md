@@ -1,6 +1,6 @@
 # Running EV Share yourself
 
-You need a Linux server (or any machine) with **Docker** and the Docker Compose plugin. EV Share runs as two containers: the app and Postgres.
+You need a Linux server (or any machine) with **Docker** and the Docker Compose plugin. EV Share runs as three containers: the app, Postgres, and Redis (for shared login rate limiting across instances).
 *(This guide and the Docker image have not been run end to end by the author yet; tell us if a step needs fixing.)*
 
 ## 1. Get the files
