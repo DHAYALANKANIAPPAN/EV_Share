@@ -1,2 +1,4 @@
 -r requirements.txt
+-r requirements-s3.txt
 pytest>=8.0
+moto[s3]>=5.0
