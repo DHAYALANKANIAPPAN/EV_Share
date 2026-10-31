@@ -13,6 +13,8 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 - **Reviews**: 1–5 stars + comment, only for your own ended, non-cancelled bookings; average rating shown in search
 - **Migrations**: Alembic; SQLite by default; Postgres tested (migrations and a full booking/payment flow)
 
+**Want to run your own copy?** See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) (Docker image and compose file are attached to each release). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Quick start
 
 ```bash
