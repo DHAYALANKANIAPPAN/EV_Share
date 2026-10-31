@@ -199,10 +199,12 @@ def test_razorpay_signature_flow(client, monkeypatch):
 def test_production_requires_strong_secret_and_real_payments():
     from cryptography.fernet import Fernet
     base = dict(env="production", secret_key="x" * 40, otp_provider="smtp", smtp_host="smtp.example.com", smtp_from="no-reply@example.com",
-                docs_encryption_key=Fernet.generate_key().decode(), payment_provider="razorpay", razorpay_key_id="a", razorpay_key_secret="b")
+                docs_encryption_key=Fernet.generate_key().decode(), payment_provider="razorpay", razorpay_key_id="a", razorpay_key_secret="b",
+                storage_backend="s3", s3_bucket="docs-bucket")
     Settings(**base)  # a complete production config is accepted
+    Settings(**{**base, "storage_backend": "local", "allow_local_storage": True})  # the server disk only when explicitly allowed
     for bad in (dict(secret_key="short"), dict(payment_provider="mock"), dict(razorpay_key_secret=""),
-                dict(otp_provider="console"), dict(smtp_host=""), dict(docs_encryption_key=""), dict(docs_encryption_key="not-a-key")):
+                dict(otp_provider="console"), dict(smtp_host=""), dict(storage_backend="local"), dict(s3_bucket=""), dict(storage_backend="ftp"), dict(docs_encryption_key=""), dict(docs_encryption_key="not-a-key")):
         with pytest.raises(ValueError):
             Settings(**{**base, **bad})
 
