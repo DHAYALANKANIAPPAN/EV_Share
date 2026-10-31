@@ -1,2 +1,7 @@
 -r requirements.txt
+-r requirements-s3.txt
+-r requirements-redis.txt
 pytest>=8.0
+moto[s3]>=5.0
+fakeredis>=2.20.0
+

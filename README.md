@@ -1,13 +1,5 @@
 # ⚡ EV Share
 
-[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/DHAYALANKANIAPPAN/badge.svg)](https://hub.xerj.org/contributors/DHAYALANKANIAPPAN)
-[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Corpus](https://img.shields.io/badge/XERJ_Corpus_Hub-Selected_Reference-8A2BE2)](https://hub.xerj.org/corpus/dhayalankaniappan--ev-share)
-
-Peer-to-peer EV charger sharing. Owners list a home or workplace charger; drivers find one on a map, book a slot, pay, and review it afterwards.
-
-> **Selected for XERJ Corpus Hub**: The UI redesign and architecture implementation of EV_Share has been selected as an open reference implementation for AI coding agents. View the indexed corpus entry on [XERJ Corpus Hub](https://hub.xerj.org/corpus/dhayalankaniappan--ev-share).
 Peer-to-peer EV charger sharing. Owners list a home or workplace charger; drivers find one on a map, book a slot, pay, and review it afterwards.
 
 ## Features
@@ -20,6 +12,8 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 - **Payments**: `mock` provider for development, `razorpay` provider (Orders API + signature verification); paid bookings are refunded on cancellation
 - **Reviews**: 1–5 stars + comment, only for your own ended, non-cancelled bookings; average rating shown in search
 - **Migrations**: Alembic; SQLite by default; Postgres tested (migrations and a full booking/payment flow)
+
+**Want to run your own copy?** See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) (Docker image and compose file are attached to each release). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
@@ -80,6 +74,7 @@ The repo ships a `Dockerfile` (runs `alembic upgrade head`, then serves on `$POR
 | `EVSHARE_SECRET_KEY` | a random 48+ character string (`python -c "import secrets; print(secrets.token_urlsafe(48))"`) |
 | `EVSHARE_DATABASE_URL` | the database URL from your host (`postgres://...` is accepted) |
 | `EVSHARE_PAYMENT_PROVIDER` | `razorpay` (production refuses the mock provider) |
+| `EVSHARE_STORAGE_BACKEND`, `EVSHARE_S3_BUCKET`, `EVSHARE_S3_REGION` | `s3` and your bucket (production refuses the server disk unless `EVSHARE_ALLOW_LOCAL_STORAGE=true`) |
 | `EVSHARE_DOCS_ENCRYPTION_KEY` | a Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `EVSHARE_OTP_PROVIDER`, `EVSHARE_SMTP_HOST`, `EVSHARE_SMTP_PORT`, `EVSHARE_SMTP_USER`, `EVSHARE_SMTP_PASSWORD`, `EVSHARE_SMTP_FROM` | `smtp` and your mail service details (production refuses the console provider) |
 | `EVSHARE_RAZORPAY_KEY_ID` / `EVSHARE_RAZORPAY_KEY_SECRET` | start with **test-mode** keys |
@@ -164,6 +159,12 @@ The portal has two tabs: **Applications** and **Users**. Users lists every drive
 
 **Restore** reverses a removal. If the email cannot be sent, the removal still happens and the reviewer is told to contact the person another way. The mail settings are the same `EVSHARE_SMTP_*` values used for OTP codes.
 
+### Document storage and deletion
+
+Uploaded documents are encrypted by the app and then stored by a backend: **`local`** (this server's disk, fine for development) or **`s3`** (AWS S3, Cloudflare R2, MinIO or any S3-compatible bucket; set `EVSHARE_STORAGE_BACKEND=s3`, `EVSHARE_S3_BUCKET`, optionally `EVSHARE_S3_REGION` / `EVSHARE_S3_ENDPOINT_URL`; credentials come from the standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` variables or an instance role). The bucket only ever holds ciphertext. Production refuses disk storage unless you set `EVSHARE_ALLOW_LOCAL_STORAGE=true`.
+
+Documents are deleted automatically once they are no longer needed: approved users' after `EVSHARE_DOCS_RETENTION_DAYS` (30), removed accounts' after the same time, rejected applicants' after `EVSHARE_DOCS_REJECTED_RETENTION_DAYS` (90), and uploads that were never submitted after 30 days. Applications under review are never touched. **Run `python -m scripts.purge_documents` once a day** (a cron job, or a scheduled job on your host); add `--dry-run` to see what it would delete.
+
 ## Security
 
 - Browser sessions use an **HttpOnly, SameSite=Lax cookie** (`Secure` outside dev); the token is never exposed to page JavaScript. Cookie-authenticated writes also need the `X-Requested-With: evshare` header (CSRF defence). API clients can keep using `Authorization: Bearer`.
@@ -178,7 +179,7 @@ The portal has two tabs: **Applications** and **Users**. Users lists every drive
 ## Known limitations
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
-- **Uploaded documents are stored on the server disk.** Most hosts wipe that disk on redeploy, so use a persistent volume or move storage to S3-style object storage before real users. Documents are also never auto-deleted yet; add a retention rule.
+- **Document storage:** use the `s3` backend (or a persistent volume) in production; the server disk of most hosts is wiped on redeploy. Schedule `scripts.purge_documents` daily so old documents are deleted.
 - **Verification is manual.** A person checks each document. Automatic checks need a licensed verification provider.
 - **No owner payouts yet**: payments are collected on your gateway account; splitting money to hosts is not built.
 - Razorpay support follows the documented API but has only been tested with mocked HTTP. Test with Razorpay test keys before going live.
