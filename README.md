@@ -1,5 +1,4 @@
 # ⚡ EV Share
-
 Peer-to-peer EV charger sharing. Owners list a home or workplace charger; drivers find one on a map, book a slot, pay, and review it afterwards.
 
 ## Features
@@ -114,7 +113,6 @@ static/         index.html, style.css, app.js (vanilla JS + Leaflet, no build st
 scripts/seed.py demo data
 tests/          pytest suite (in-memory SQLite)
 ```
-
 ## Account verification
 
 Everyone registers as a **driver** or a **hub** (house or shop) and must be approved before using the marketplace:
