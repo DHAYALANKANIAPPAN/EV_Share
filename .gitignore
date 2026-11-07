@@ -6,3 +6,9 @@ venv/
 *.db
 uploads/
 .pytest_cache/
+
+# never commit
+*.pem
+*.key
+*.crdownload
+*.zip

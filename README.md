@@ -109,7 +109,7 @@ Edit `app/models.py`, then `alembic revision --autogenerate -m "describe change"
 ```
 app/            FastAPI app: routers/, services/ (geo, availability, payments), models, schemas, security
 migrations/     Alembic environment + versions/
-static/         index.html, style.css, app.js (vanilla JS + Leaflet, no build step)
+static/         index.html, staff.html, css/app.css, js/ (ES modules, no build step)
 scripts/seed.py demo data
 tests/          pytest suite (in-memory SQLite)
 ```

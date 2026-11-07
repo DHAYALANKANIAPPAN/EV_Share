@@ -16,9 +16,25 @@ for r in (auth, verification, admin, hub, chargers, bookings, reviews, payments)
     app.include_router(r.router)
 
 
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://checkout.razorpay.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",  # 'unsafe-inline': Tailwind's CDN build writes styles
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https://*.tile.openstreetmap.org",
+    "connect-src 'self'",
+    "frame-src https://checkout.razorpay.com https://api.razorpay.com",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+])
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     resp = await call_next(request)
+    if settings.csp_mode == "enforce":
+        resp.headers["Content-Security-Policy"] = CSP
+    elif settings.csp_mode == "report-only":
+        resp.headers["Content-Security-Policy-Report-Only"] = CSP
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -47,7 +63,4 @@ def staff_portal():
     return FileResponse(STATIC_DIR / "staff.html", headers={"X-Robots-Tag": "noindex, nofollow", "Cache-Control": "no-store"})
 
 
-@app.get("/classic", include_in_schema=False)
-def classic():
-    """Previous Leaflet UI (adds charger sharing, reviews, owner tools) until they are ported."""
-    return FileResponse(STATIC_DIR / "classic.html")
+
