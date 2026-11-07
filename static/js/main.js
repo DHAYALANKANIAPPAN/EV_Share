@@ -460,8 +460,33 @@ function openAuth() {
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
     h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
     h("button", { className: "btn btn-primary", type: "submit", textContent: "Login" }),
+    h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Forgot password?", onclick: () => { d.close(); openForgot(email.value); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "New here? Register", onclick: () => { d.close(); go("register"); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Cancel", onclick: () => d.close() })));
+  d.showModal(); email.focus();
+}
+
+/* ---------- forgot password: email a code, then choose a new password ---------- */
+function openForgot(prefill = "") {
+  const d = $("#dlg"), opener = document.activeElement;
+  d.onclose = () => opener && opener.focus && opener.focus();
+  const email = h("input", { id: "fp-email", type: "email", required: true, autocomplete: "email", value: prefill, placeholder: "name@example.com" });
+  const code = h("input", { id: "fp-code", inputMode: "numeric", maxLength: 6, autocomplete: "one-time-code", placeholder: "6-digit code" });
+  const pass = h("input", { id: "fp-pass", type: "password", minLength: 8, required: true, autocomplete: "new-password" });
+  const f = (id, t, el, hint) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el, hint ? h("p", { className: "text-xs text-mute font-normal", textContent: hint }) : null);
+  const stepTwo = () => d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
+      e.preventDefault(); await api.resetPassword(email.value, code.value.trim(), pass.value); d.close();
+      toast("Password changed. Sign in with your new password."); openAuth(); }) },
+    h("h2", { className: "text-xl font-semibold", textContent: "Choose a new password" }),
+    h("p", { className: "text-sm text-mute", textContent: `We sent a code to ${email.value}. It expires in 10 minutes.` }),
+    f("fp-code", "Code", code), f("fp-pass", "New password", pass, "At least 8 characters. Changing it signs out every device."),
+    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Cancel", onclick: () => d.close() }), h("button", { className: "btn btn-primary", type: "submit", textContent: "Change password" }))));
+  d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
+      e.preventDefault(); await api.forgot(email.value); toast("If that email has an account, a code is on its way."); stepTwo(); }) },
+    h("h2", { className: "text-xl font-semibold", textContent: "Forgot your password?" }),
+    h("p", { className: "text-sm text-mute", textContent: "Enter your email and we'll send you a code. If the email has no account, we'll say the same thing." }),
+    f("fp-email", "Email", email),
+    h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Cancel", onclick: () => d.close() }), h("button", { className: "btn btn-primary", type: "submit", textContent: "Send code" }))));
   d.showModal(); email.focus();
 }
 

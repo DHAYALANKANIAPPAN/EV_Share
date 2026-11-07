@@ -15,18 +15,19 @@ log = logging.getLogger("evshare.otp")
 
 NOTICE = ("EV Share will never call, text or email you to ask for this code. Enter it only inside the EV Share app, "
           "on the screen that asks for it. If anyone asks you to read it out, it is a scam.")
+GENERIC_NOTE = "If you didn't ask for this code, you can ignore this email. Nothing changes unless the code is entered."
 
 
 class ConsoleSender:
     def send(self, email: str, code: str) -> None:
-        log.warning("DEV ONLY: verification code for %s is %s", email, code)
+        log.warning("DEV ONLY: EV Share code for %s is %s", email, code)
 
 
 class SmtpSender:
     def send(self, email: str, code: str) -> None:
         try:
-            send_mail(email, "Your EV Share verification code",
-                      f"Your EV Share verification code is {code}. It expires in {settings.otp_ttl_minutes} minutes.\n\n{NOTICE}")
+            send_mail(email, "Your EV Share code",
+                      f"Your EV Share code is {code}. It expires in {settings.otp_ttl_minutes} minutes.\n\n{GENERIC_NOTE}\n\n{NOTICE}")
         except MailError as exc:
             raise HTTPException(502, "We couldn't send the code. Try again in a minute.") from exc
 
@@ -35,11 +36,11 @@ def get_sender():
     return SmtpSender() if settings.otp_provider == "smtp" else ConsoleSender()
 
 
-def _hash(user_id: int, code: str) -> str:
-    return hmac.new(settings.secret_key.encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+def _hash(user_id: int, code: str, purpose: str) -> str:
+    return hmac.new(settings.secret_key.encode(), f"{user_id}:{purpose}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def send_otp(db, user: User) -> None:
+def send_otp(db, user: User, purpose: str = "verify") -> None:
     now = utcnow()
     last = db.scalar(select(func.max(OtpCode.created_at)).where(OtpCode.user_id == user.id))
     if last and (now - last).total_seconds() < settings.otp_resend_seconds:
@@ -48,15 +49,16 @@ def send_otp(db, user: User) -> None:
     if recent >= settings.otp_max_per_hour:
         raise HTTPException(429, "Too many code requests. Try again later.")
     for old in db.scalars(select(OtpCode).where(OtpCode.user_id == user.id, OtpCode.consumed.is_(False))):
-        old.consumed = True
+        old.consumed = True  # a new code replaces any earlier unused one
     code = f"{secrets.randbelow(10**6):06d}"
-    db.add(OtpCode(user_id=user.id, code_hash=_hash(user.id, code), expires_at=now + timedelta(minutes=settings.otp_ttl_minutes)))
+    db.add(OtpCode(user_id=user.id, code_hash=_hash(user.id, code, purpose), purpose=purpose,
+                   expires_at=now + timedelta(minutes=settings.otp_ttl_minutes)))
     db.commit()
     get_sender().send(user.email, code)
 
 
-def confirm_otp(db, user: User, code: str) -> None:
-    otp = db.scalar(select(OtpCode).where(OtpCode.user_id == user.id, OtpCode.consumed.is_(False),
+def confirm_otp(db, user: User, code: str, purpose: str = "verify") -> None:
+    otp = db.scalar(select(OtpCode).where(OtpCode.user_id == user.id, OtpCode.consumed.is_(False), OtpCode.purpose == purpose,
                                           OtpCode.expires_at > utcnow()).order_by(OtpCode.id.desc()).limit(1))
     if otp is None:
         raise HTTPException(400, "That code has expired. Ask for a new one.")
@@ -65,9 +67,10 @@ def confirm_otp(db, user: User, code: str) -> None:
         db.commit()
         raise HTTPException(429, "Too many wrong attempts. Ask for a new code.")
     otp.attempts += 1
-    if not hmac.compare_digest(otp.code_hash, _hash(user.id, code)):
+    if not hmac.compare_digest(otp.code_hash, _hash(user.id, code, purpose)):
         db.commit()
         raise HTTPException(400, "That code isn't right. Check it and try again.")
     otp.consumed = True
-    user.email_verified = True
+    if purpose == "verify":
+        user.email_verified = True
     db.commit()

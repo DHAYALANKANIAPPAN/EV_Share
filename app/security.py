@@ -27,14 +27,26 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(digest.hex(), digest_hex)
 
 
-def create_access_token(user_id: int) -> str:
-    exp = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_minutes)
-    return jwt.encode({"sub": str(user_id), "exp": exp}, settings.secret_key, algorithm=_ALGO)
+def password_fingerprint(password_hash: str) -> str:
+    """Short, non-reversible tag of the current password hash. A token carries it; changing the password changes
+    it, which voids every session issued before the change (no clock comparisons involved)."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:24]
+
+
+def create_access_token(user_id: int, password_hash: str) -> str:
+    claims = {"sub": str(user_id), "pwd": password_fingerprint(password_hash),
+              "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_minutes)}
+    return jwt.encode(claims, settings.secret_key, algorithm=_ALGO)
+
+
+def read_access_token(token: str) -> tuple[int | None, str | None]:
+    """(user id, password fingerprint) if the signature and expiry are valid, otherwise (None, None)."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGO])
+        return int(payload["sub"]), payload.get("pwd")
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
+        return None, None
 
 
 def decode_access_token(token: str) -> int | None:
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGO])
-        return int(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
-        return None
+    return read_access_token(token)[0]

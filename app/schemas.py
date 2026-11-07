@@ -319,3 +319,14 @@ class BusySlot(BaseModel):
     start_time: datetime
     end_time: datetime
     in_progress: bool
+
+
+# ---- password reset ----
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=128)

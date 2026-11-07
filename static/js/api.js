@@ -26,6 +26,8 @@ export const api = {
   goOffline: () => call("/hub/offline", { method: "POST" }),
   finish: (id) => call(`/bookings/${id}/finish`, { method: "POST" }),
   busy: (id) => call(`/chargers/${id}/busy`),
+  forgot: (email) => call("/auth/password/forgot", { method: "POST", body: { email } }),
+  resetPassword: (email, code, new_password) => call("/auth/password/reset", { method: "POST", body: { email, code, new_password } }),
   hubOrders: (scope) => call(`/hub/orders?scope=${scope}`),
   acceptOrder: (id) => call(`/hub/orders/${id}/accept`, { method: "POST" }),
   declineOrder: (id, reason) => call(`/hub/orders/${id}/decline`, { method: "POST", body: { reason: reason || null } }),
