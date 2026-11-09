@@ -1,3 +1,4 @@
+import hmac
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import Role, User, VerificationStatus
-from .security import COOKIE_NAME, decode_access_token
+from .security import COOKIE_NAME, password_fingerprint, read_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
@@ -26,8 +27,10 @@ def get_current_user(request: Request, bearer: Annotated[str | None, Depends(oau
         via_cookie = token is not None
     if via_cookie and request.method not in SAFE_METHODS and request.headers.get("x-requested-with") != "evshare":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Missing X-Requested-With header")
-    user_id = decode_access_token(token) if token else None
+    user_id, pwd = read_access_token(token) if token else (None, None)
     user = db.get(User, user_id) if user_id is not None else None
+    if user is not None and not (pwd and hmac.compare_digest(pwd, password_fingerprint(user.password_hash))):
+        user = None  # issued before the password was last changed: that session is over
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"})

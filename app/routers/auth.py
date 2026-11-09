@@ -7,8 +7,9 @@ from sqlalchemy import select
 from ..config import settings
 from ..deps import DB, CurrentUser
 from ..models import User
-from ..schemas import Token, UserCreate, UserOut
+from ..schemas import ForgotIn, ResetIn, Token, UserCreate, UserOut
 from ..security import COOKIE_NAME, create_access_token, hash_password, verify_password
+from ..services.otp import confirm_otp, send_otp
 from ..services.ratelimit import login_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,7 +40,7 @@ def _authenticate(request: Request, response: Response, form, db, staff: bool) -
     if not user.is_active:  # only revealed after the password was right
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been removed. Check your email for the reason, or register again with a different email address.")
     login_limiter.reset(key)
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, user.password_hash)
     response.set_cookie(COOKIE_NAME, token, max_age=settings.access_token_minutes * 60, httponly=True,
                         samesite="lax", secure=settings.env != "dev", path="/")
     return Token(access_token=token)
@@ -53,6 +54,28 @@ def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRe
 @router.post("/staff/login", response_model=Token, include_in_schema=False)
 def staff_login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
     return _authenticate(request, response, form, db, staff=True)
+
+
+@router.post("/password/forgot", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(body: ForgotIn, db: DB):
+    """Always answers the same way, so the form cannot be used to find out which emails have accounts."""
+    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    if user and user.is_active:
+        try:
+            send_otp(db, user, purpose="reset")
+        except HTTPException:
+            pass  # cooldown or mail trouble: stay silent, the same answer is given
+    return {"detail": "If an account exists for that email, we've sent a code to it."}
+
+
+@router.post("/password/reset", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(body: ResetIn, db: DB):
+    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    if not user or not user.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "That code isn't right, or it has expired. Ask for a new one.")
+    confirm_otp(db, user, body.code, purpose="reset")
+    user.password_hash = hash_password(body.new_password)  # every session signed in before this stops working
+    db.commit()
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
