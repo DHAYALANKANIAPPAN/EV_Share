@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     max_booking_hours: int = 8
     live_ttl_minutes: int = 30  # a hub stays live this long after its last location ping (the page pings every 5 min)
     live_radius_m: int = 500    # a charger counts as live only if the hub pinged from within this distance
+    csp_mode: str = "report-only"  # report-only (logs violations, blocks nothing) | enforce | off
     staff_path: str = "/staff"  # unlinked reviewer portal page; pick something less guessable in production
     login_max_failures: int = 5  # per (client IP, email) within the window
     login_window_minutes: int = 15
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
         if self.env != "dev" and (self.secret_key == DEV_SECRET or len(self.secret_key) < 32):
             raise ValueError("EVSHARE_SECRET_KEY must be a random string of 32+ characters when EVSHARE_ENV is not 'dev'")
         if not re.fullmatch(r"/[A-Za-z0-9_-]{2,40}", self.staff_path) or self.staff_path.lstrip("/") in {
-                "static", "auth", "admin", "docs", "redoc", "openapi", "health", "chargers", "bookings", "payments", "reviews", "verification", "classic"}:
+                "static", "auth", "admin", "docs", "redoc", "openapi", "health", "chargers", "bookings", "payments", "reviews", "verification"}:
             raise ValueError("EVSHARE_STAFF_PATH must look like /my-secret-portal and must not clash with an existing route")
         if self.storage_backend not in ("local", "s3"):
             raise ValueError("EVSHARE_STORAGE_BACKEND must be 'local' or 's3'")
@@ -74,6 +75,8 @@ class Settings(BaseSettings):
             raise ValueError("S3 storage selected but EVSHARE_S3_BUCKET is not set")
         if self.env != "dev" and self.storage_backend == "local" and not self.allow_local_storage:
             raise ValueError("Outside dev, uploaded documents need persistent storage: set EVSHARE_STORAGE_BACKEND=s3, or EVSHARE_ALLOW_LOCAL_STORAGE=true if you really want the server disk")
+        if self.csp_mode not in ("report-only", "enforce", "off"):
+            raise ValueError("EVSHARE_CSP_MODE must be report-only, enforce or off")
         if self.otp_provider not in ("console", "smtp"):
             raise ValueError("EVSHARE_OTP_PROVIDER must be 'console' or 'smtp'")
         if self.otp_provider == "smtp" and not (self.smtp_host and self.smtp_from):
