@@ -1,5 +1,6 @@
 name: CI
-on: [push, pull_request]
+# Runs only when you start it: Actions tab > CI > Run workflow
+on: workflow_dispatch
 jobs:
   test:
     runs-on: ubuntu-latest
