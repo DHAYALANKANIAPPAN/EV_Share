@@ -152,11 +152,26 @@ function emptyFind() {
     h("h2", { id: "e1", className: "font-semibold text-lg", textContent: msg[0] }), h("p", { className: "text-sm text-mute", textContent: msg[1] }),
     filtered() ? h("button", { className: "btn mt-2", textContent: "Clear all filters", onclick: () => { S.f = { connector: "", power: "", price: "" }; guard(loadChargers)(); } }) : null);
 }
+/* visitors: a short welcome that explains the product in three steps */
+function welcomePanel() {
+  return h("section", { className: "panel hero p-6 md:p-8 grid gap-6", "aria-labelledby": "welcome-title" },
+    h("div", { className: "grid gap-2 max-w-2xl" },
+      h("p", { className: "text-sm text-accent font-medium", textContent: "Charge your EV at a home or shop near you" }),
+      h("h2", { id: "welcome-title", className: "text-2xl md:text-3xl font-semibold tracking-tight", textContent: "Book a live charger in three steps" }),
+      h("p", { className: "text-mute", textContent: "Hosts share chargers at their home or shop. You only see chargers that are live right now, so what you book is ready." })),
+    h("ol", { className: "grid gap-4 md:grid-cols-3" }, [["Find", "Pick a live charger on the map, or near you."], ["Request", "Choose a time. The host accepts or declines."], ["Pay and charge", "Pay once accepted, follow the directions, and charge."]]
+      .map(([t, d], i) => h("li", { className: "step-card" }, h("span", { className: "step-num", textContent: String(i + 1) }), h("h3", { className: "font-medium", textContent: t }), h("p", { className: "text-sm text-mute", textContent: d })))),
+    h("div", { className: "flex flex-wrap gap-3" },
+      h("button", { className: "btn btn-primary", textContent: "Create an account", onclick: () => go("register") }),
+      h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }),
+      h("button", { className: "btn border-transparent text-mute", textContent: "Share a charger instead", onclick: () => { S.reg = { name: "", email: "", pass: "", role: "HUB", hub: "HOUSE" }; go("register"); } })));
+}
 function findView() {
   const list = S.loading ? skeleton() : S.chargers.length ? h("ul", { className: "panel overflow-hidden" }, S.chargers.map(chargerRow)) : emptyFind();
   return h("div", { className: "grid gap-6" },
     h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Find a live charger" }),
       h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Only chargers whose hub is live right now are shown. Send a request, the hub accepts it, then you pay and head over." })),
+    !S.user ? welcomePanel() : null,
     activeBooking() ? h("div", { className: "panel p-4 flex gap-3 items-center flex-wrap text-sm", role: "note" }, icon("info", "size-5 shrink-0 text-accent"),
       h("span", { className: "flex-1", textContent: `You have an open booking at ${activeBooking().charger_title}. Finish or cancel it before booking another charger.` }), h("button", { className: "btn", textContent: "View booking", onclick: () => go("bookings") })) : null,
     filterBar(), h("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]" }, list, S.chargers.length && !S.loading ? mapPanel() : null));
@@ -165,6 +180,24 @@ function findView() {
 /* ---------- bookings ---------- */
 async function loadBookings() { S.loading = true; render(); try { S.bookings = await api.bookings(); } finally { S.loading = false; render(); } }
 const tm = (x) => utc(x).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+/* a 4-step progress line for one booking: Requested > Accepted > Paid > Charge */
+function journey(b) {
+  const paid = b.payment_status === "PAID" || b.estimated_cost <= 0, now = new Date();
+  let done;
+  if (b.status === "REQUESTED") done = 0;
+  else if (b.status === "CONFIRMED" && !paid) done = 2;
+  else if (b.status === "CONFIRMED") done = utc(b.end_time) <= now ? 4 : 3;
+  else if (b.status === "COMPLETED") done = 4;
+  else return null;
+  const labels = ["Requested", "Accepted", "Paid", "Charge"];
+  return h("ol", { className: "journey", "aria-label": "Booking progress" }, labels.flatMap((label, i) => {
+    const isDone = i < done, isNow = i === done && done < 4;
+    const item = h("li", { className: "journey-step" + (isDone ? " done" : "") + (isNow ? " now" : "") },
+      h("span", { className: "journey-dot", "aria-hidden": "true" }, isDone ? "✓" : String(i + 1)), h("span", { textContent: label }),
+      isNow ? h("span", { className: "sr-only", textContent: " (current step)" }) : null);
+    return i < labels.length - 1 ? [item, h("li", { className: "journey-line" + (isDone ? " done" : ""), "aria-hidden": "true" })] : [item];
+  }));
+}
 function bookingsView() {
   const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "My bookings" }), h("p", { className: "text-mute mt-1", textContent: "Your requests and sessions, newest first." }));
   if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
@@ -186,6 +219,7 @@ function bookingsView() {
     const label = running ? "In progress" : st === "REQUESTED" ? "Waiting" : st === "CONFIRMED" ? (paid ? "Confirmed" : "Pay now") : st[0] + st.slice(1).toLowerCase();
     return h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" }, h("div", { className: "flex items-center gap-2 flex-wrap" }, h("h3", { className: "font-medium", textContent: b.charger_title }), pill(label, tone)),
       h("p", { className: "text-sm text-mute", textContent: `${fmtRange(b.start_time, b.end_time)}, ${money(b.estimated_cost)}` }),
+      journey(b),
       h("p", { className: "text-sm flex items-start gap-1 " + cls }, icon(ic, "size-4 mt-0.5 shrink-0"), h("span", {}, line, b.hold_expires_at && (st === "REQUESTED" || (st === "CONFIRMED" && !paid)) ? [st === "REQUESTED" ? " Answer expected within " : " Pay within ", countdown(b.hold_expires_at), "."] : null)),
       running ? progress(b.start_time, b.end_time) : null,
       b.pickup_address ? h("p", { className: "text-sm", textContent: `Where: ${b.pickup_address}` }) : null),
@@ -256,7 +290,10 @@ function ordersView() {
   const { pending, past } = S.orders, nowD = new Date();
   const isPaid = (o) => o.payment_status === "PAID" || o.estimated_cost <= 0;
   const running = S.orders.upcoming.filter((o) => isPaid(o) && utc(o.start_time) <= nowD), upcoming = S.orders.upcoming.filter((o) => !running.includes(o));
-  return h("div", { className: "grid gap-6" }, head, offline,
+  const stat = (label, n, ic) => h("div", { className: "panel stat" }, h("p", { className: "text-sm text-mute flex items-center gap-2" }, icon(ic, "size-4"), label), h("p", { className: "stat-num", textContent: String(n) }));
+  const summary = h("div", { className: "stat-grid" }, stat("New requests", pending.length, "inbox"), stat("Accepted", upcoming.length, "calendar-check"),
+    stat("Charging now", running.length, "zap"), stat("Completed", past.filter((o) => o.status === "COMPLETED").length, "check-circle-2"));
+  return h("div", { className: "grid gap-6" }, head, offline, summary,
     block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), h("span", {}, "Please answer within ", o.hold_expires_at ? countdown(o.hold_expires_at) : "a few minutes", ".")), [
       h("button", { className: "btn btn-primary", textContent: "Accept", onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
       h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
@@ -451,14 +488,15 @@ function openDrawer(c) {
 /* ---------- login (drivers and hubs) ---------- */
 function openAuth() {
   const d = $("#dlg"), opener = document.activeElement;
-  const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password" });
+  const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password", className: "flex-1" });
+  const showPass = h("button", { type: "button", className: "btn sm", textContent: "Show", "aria-label": "Show password", onclick: (e) => { const shown = pass.type === "text"; pass.type = shown ? "password" : "text"; e.currentTarget.textContent = shown ? "Show" : "Hide"; } });
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
       e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
-    h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", pass),
+    h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
     h("button", { className: "btn btn-primary", type: "submit", textContent: "Login" }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Forgot password?", onclick: () => { d.close(); openForgot(email.value); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "New here? Register", onclick: () => { d.close(); go("register"); } }),
