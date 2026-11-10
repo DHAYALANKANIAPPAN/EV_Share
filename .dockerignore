@@ -10,3 +10,4 @@ uploads
 .env
 .pytest_cache
 tests
+node_modules

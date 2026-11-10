@@ -1,5 +1,7 @@
 # EV Share: handoff document
 
+> **Status update (latest):** the remaining product items are done: the hub Dashboard (sessions, earnings, ratings), live order updates (`/hub/stream`), and the front-end libraries are in the project (no CDNs). Jenkins is the only pipeline. Still not built: metered billing, host payouts, email verification for sign-up beyond the codes, and a real-browser check. Those need your decisions or accounts.
+
 ## 1. What the product is
 EV Share is a peer-to-peer EV charger marketplace. **Hubs** (a house or shop with a charger) list chargers. **Drivers** find chargers that are **live right now**, send a booking request, the hub accepts or declines, the driver pays, and then charges. **Reviewers** (staff) verify hubs and drivers against official records and manage accounts, from a separate hidden portal.
 
@@ -59,7 +61,7 @@ static/
   app.js, style.css, classic.html   OLD interface, kept at /classic only; safe to delete
 tests/               72 tests (see section 6)
 docs/SELF_HOSTING.md how to run it on a server with Docker
-.github/workflows/   ci.yml (tests + migration checks on SQLite and Postgres), release.yml (tests, Docker image, GitHub release on tags)
+Jenkinsfile (the only pipeline: tests, migration checks, optional image build and push); JENKINS.md (setup)
 Dockerfile, docker-compose.prod.yml, .dockerignore
 requirements.txt, requirements-dev.txt, requirements-postgres.txt, requirements-s3.txt, requirements-redis.txt
 .env.example, README.md, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md
@@ -197,7 +199,7 @@ ENV (dev|production), SECRET_KEY, DATABASE_URL, ACCESS_TOKEN_MINUTES (60), MAX_B
 7. **Branch `feature/hub-go-live`:** location-checked Go live bar, live-only chargers, then the request/accept/decline/pay flow, then the lifecycle: running sessions, end session, busy chargers, one booking per driver.
 8. **Branch `feature/ui-polish`:** stylesheet split into `static/css/app.css`, status pills, countdowns, progress bars, spinners, animations, reduced-motion support.
 9. **Branch `feature/document-storage`:** S3 or local storage, encrypted; automatic retention and `scripts.purge_documents`.
-10. **Branch `chore/releases`:** release workflow (tests, Docker image to GHCR, GitHub release on tags), Dependabot, production compose file, self-hosting guide, CONTRIBUTING, SECURITY, CHANGELOG.
+10. **Branch `chore/releases`:** Docker image to GHCR (now published from Jenkins), production compose file, self-hosting guide, CONTRIBUTING, SECURITY, CHANGELOG.
 11. **Branch `fix/shared-login-limit`:** Redis-backed sliding-window login rate limiting (`RedisLoginLimiter`) across processes and servers, configurable via `EVSHARE_RATELIMIT_BACKEND=redis` and `EVSHARE_REDIS_URL`, backed by `fakeredis` in dev/tests, Redis container in docker compose.
 12. **External:** the project is listed on the XERJ Corpus Hub as a *corpus contributor*, not a code contributor to XERJ.
 
@@ -232,7 +234,7 @@ ENV (dev|production), SECRET_KEY, DATABASE_URL, ACCESS_TOKEN_MINUTES (60), MAX_B
 - `main` is the protected release line. Every feature gets its own branch named `feature/…`, `fix/…`, `docs/…` or `chore/…`.
 - Follow-up work on an existing feature goes in that feature's branch. Only a new feature starts a new branch.
 - Each change: `git checkout -B <branch> origin/main` (or `git checkout -b` for a new branch), apply, `pytest`, `git status`, commit, `git push -u origin <branch>`, open a pull request, merge, then `git checkout main && git pull origin main`.
-- Tag releases `vX.Y.Z` to trigger the release workflow.
+- Publish releases from Jenkins (tick PUSH_IMAGE, set IMAGE_TAG to the version). GitHub Actions is not used.
 
 ## 11. Working agreements with the owner
 - Deliver changes as **whole files in zips**, with exact commands to unzip, delete the zip, run tests, and commit.

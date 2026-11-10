@@ -45,3 +45,21 @@ def test_csp_mode_must_be_a_known_value():
     with pytest.raises(ValueError):
         Settings(csp_mode="sometimes")
     assert Settings().csp_mode == "report-only"
+
+
+def test_pages_load_nothing_from_outside_the_site():
+    """Everything the pages need is in the project, so the policy needs no CDN exceptions."""
+    import re
+    for page in ("index.html", "staff.html"):
+        html = (STATIC / page).read_text()
+        assert not re.search(r'(src|href)="https?://', html), page
+    for name in ("css/tailwind.css", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css", "vendor/lucide.min.js",
+                 "vendor/fonts/geist.css", "vendor/fonts/geist-latin-400-normal.woff2"):
+        assert (STATIC / name).exists(), name
+
+
+def test_policy_names_no_cdn_hosts(client, monkeypatch):
+    monkeypatch.setattr(main_mod.settings, "csp_mode", "enforce")
+    policy = client.get("/").headers["Content-Security-Policy"]
+    for host in ("cdn.tailwindcss.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com"):
+        assert host not in policy, host

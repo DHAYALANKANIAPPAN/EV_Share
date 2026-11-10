@@ -29,6 +29,7 @@ export const api = {
   forgot: (email) => call("/auth/password/forgot", { method: "POST", body: { email } }),
   resetPassword: (email, code, new_password) => call("/auth/password/reset", { method: "POST", body: { email, code, new_password } }),
   hubOrders: (scope) => call(`/hub/orders?scope=${scope}`),
+  hubDashboard: () => call("/hub/dashboard"),
   acceptOrder: (id) => call(`/hub/orders/${id}/accept`, { method: "POST" }),
   declineOrder: (id, reason) => call(`/hub/orders/${id}/decline`, { method: "POST", body: { reason: reason || null } }),
   verification: () => call("/verification/status"),

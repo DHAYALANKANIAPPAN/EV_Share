@@ -12,3 +12,5 @@ uploads/
 *.key
 *.crdownload
 *.zip
+
+node_modules/

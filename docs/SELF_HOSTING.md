@@ -4,7 +4,11 @@ You need a Linux server (or any machine) with **Docker** and the Docker Compose 
 *(This guide and the Docker image have not been run end to end by the author yet; tell us if a step needs fixing.)*
 
 ## 1. Get the files
-Download `docker-compose.prod.yml` and `.env.example` from the latest [release](../../releases), then:
+Get the project files (you only need the `docker-compose.prod.yml` and `.env.example` files from it):
+```bash
+git clone https://github.com/DHAYALANKANIAPPAN/EV_Share.git && cd EV_Share
+```
+Then:
 ```bash
 cp .env.example .env
 ```

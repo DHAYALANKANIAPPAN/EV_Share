@@ -12,7 +12,7 @@ Peer-to-peer EV charger sharing. Owners list a home or workplace charger; driver
 - **Reviews**: 1–5 stars + comment, only for your own ended, non-cancelled bookings; average rating shown in search
 - **Migrations**: Alembic; SQLite by default; Postgres tested (migrations and a full booking/payment flow)
 
-**Want to run your own copy?** See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) (Docker image and compose file are attached to each release). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+**Want to run your own copy?** See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) (Docker image and compose file are published with each release). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
@@ -172,11 +172,16 @@ Documents are deleted automatically once they are no longer needed: approved use
 
 ## Front-end notes
 
-`static/css/app.css` holds the design tokens (light and dark colours as CSS variables), then buttons, forms, rows, status pills, drawer/dialog/toast styles and animations, in numbered sections. Tailwind utilities (CDN build, settings in `static/js/tailwind-config.js`) handle layout. Live countdowns and progress bars come from one shared timer in `static/js/ui.js`, and animations switch off for people who prefer reduced motion. The CDN Tailwind build is fine for development; compile it before a high-traffic launch.
+The pages load nothing from outside the site (see the Content-Security-Policy in `app/main.py`).
+- `static/css/tailwind.css` is built from `tailwind.config.js`. After changing classes or the Tailwind settings, run `npm install` once, then `npm run build:css`.
+- `static/css/app.css` holds the design tokens (light and dark colours as CSS variables), components and animations.
+- `static/vendor/` holds Leaflet (map), Lucide (icons) and Geist (font), so no CDN is needed.
+- Hubs get a live order stream (`/hub/stream`, server-sent events). The Orders page updates when a request arrives, and it still re-checks every 20 seconds as a fallback.
 
 ## Known limitations
 
 - **Billing is a flat slot price** (full power × hours × ₹/kWh), not metered energy.
+- **Earnings on the Dashboard are gross estimates.** There is no commission or payout yet.
 - **Document storage:** use the `s3` backend (or a persistent volume) in production; the server disk of most hosts is wiped on redeploy. Schedule `scripts.purge_documents` daily so old documents are deleted.
 - **Verification is manual.** A person checks each document. Automatic checks need a licensed verification provider.
 - **No owner payouts yet**: payments are collected on your gateway account; splitting money to hosts is not built.

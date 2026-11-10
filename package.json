@@ -1,0 +1,11 @@
+{
+  "name": "ev-share",
+  "private": true,
+  "description": "Front-end build tools. The app itself needs no Node at runtime.",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i static/css/tailwind-input.css -o static/css/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}
