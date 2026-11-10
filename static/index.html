@@ -4,13 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EV Share · find and share EV chargers</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/vendor/fonts/geist.css">
 <script src="/static/js/theme-init.js"></script>
-<script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script src="/static/js/tailwind-config.js"></script>
+<link rel="stylesheet" href="/static/css/tailwind.css">
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="bg-canvas text-ink min-h-screen">
@@ -28,8 +26,8 @@
 <aside id="drawer" class="drawer" aria-label="Reserve a charger" role="dialog" aria-modal="true"></aside>
 <dialog id="dlg"></dialog>
 <div id="toasts" class="fixed bottom-4 left-1/2 -translate-x-1/2 grid gap-2 z-50 w-[min(420px,92vw)]" aria-live="polite"></div>
-<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/static/vendor/lucide.min.js"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
 <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

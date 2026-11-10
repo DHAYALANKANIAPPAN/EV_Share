@@ -20,4 +20,4 @@ Always activate the virtual environment (`source venv/bin/activate`) in a new te
 Edit `app/models.py`, run `alembic revision --autogenerate -m "what changed"`, review the file in `migrations/versions/`, and run `alembic upgrade head`. New enum values on Postgres need an `ALTER TYPE ... ADD VALUE` step (see `0005`).
 
 ## Releases
-`git tag v0.2.0 && git push origin v0.2.0` builds the Docker image and publishes a GitHub Release (see `.github/workflows/release.yml`).
+Releases are published from Jenkins: start **Build with Parameters**, tick **PUSH_IMAGE**, and enter the version (see `JENKINS.md`, section 4).

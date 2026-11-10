@@ -18,11 +18,11 @@ for r in (auth, verification, admin, hub, chargers, bookings, reviews, payments)
 
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://checkout.razorpay.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",  # 'unsafe-inline': Tailwind's CDN build writes styles
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https://*.tile.openstreetmap.org",
-    "connect-src 'self'",
+    "script-src 'self' https://checkout.razorpay.com",  # Razorpay's checkout script; nothing else from outside
+    "style-src 'self' 'unsafe-inline'",                  # Leaflet and the page's helpers set inline styles
+    "font-src 'self'",
+    "img-src 'self' data: https://*.tile.openstreetmap.org",  # OpenStreetMap map tiles
+    "connect-src 'self' https://lumberjack.razorpay.com https://api.razorpay.com",
     "frame-src https://checkout.razorpay.com https://api.razorpay.com",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
 ])
