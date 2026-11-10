@@ -20,31 +20,21 @@ pipeline {
     }
 
     stages {
-        stage('Test') {
+        stage('Test and migrations') {
             agent {
                 docker {
                     image 'python:3.12-slim'
-                    args '-u root'
+                    // The named volume keeps downloaded packages between builds, so later builds install much faster.
+                    args '-u root -v evshare-pip-cache:/root/.cache/pip'
                 }
+            }
+            environment {
+                PIP_ROOT_USER_ACTION = 'ignore'
             }
             steps {
                 sh '''
                     pip install -q -r requirements-dev.txt -r requirements-redis.txt -r requirements-s3.txt
                     pytest -q
-                '''
-            }
-        }
-
-        stage('Database migrations') {
-            agent {
-                docker {
-                    image 'python:3.12-slim'
-                    args '-u root'
-                }
-            }
-            steps {
-                sh '''
-                    pip install -q -r requirements.txt -r requirements-redis.txt -r requirements-s3.txt
                     rm -f evshare.db
                     alembic upgrade head
                     alembic check
