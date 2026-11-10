@@ -124,3 +124,19 @@ dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
 .evpin[data-on="true"] { transform: scale(1.3); }
 .pin { cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform .15s; }
 .pin:hover, .pin[data-on="true"] { transform: scale(1.25); }
+
+/* 11 ── onboarding, booking progress and summaries ────────────────────────────── */
+.hero { background: linear-gradient(135deg, rgb(var(--accent) / .12), rgb(var(--panel)) 65%); }
+.step-card { display: grid; gap: 6px; }
+.step-num { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: rgb(var(--accent) / .15); color: rgb(var(--accent)); font-weight: 600; }
+.journey { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; font-size: 12px; color: rgb(var(--mute)); list-style: none; }
+.journey-step { display: inline-flex; align-items: center; gap: 6px; }
+.journey-dot { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; border: 2px solid rgb(var(--line)); font-size: 10px; font-weight: 600; }
+.journey-step.done .journey-dot { background: rgb(var(--accent)); border-color: rgb(var(--accent)); color: rgb(var(--onaccent)); }
+.journey-step.now { color: rgb(var(--ink)); font-weight: 600; }
+.journey-step.now .journey-dot { border-color: rgb(var(--accent)); color: rgb(var(--accent)); }
+.journey-line { width: 22px; height: 2px; border-radius: 2px; background: rgb(var(--line)); }
+.journey-line.done { background: rgb(var(--accent)); }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { padding: 14px 16px; display: grid; gap: 4px; }
+.stat-num { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
