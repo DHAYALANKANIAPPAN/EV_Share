@@ -7,7 +7,9 @@ os.environ["EVSHARE_DATABASE_URL"] = "sqlite://"
 os.environ["EVSHARE_PAYMENT_PROVIDER"] = "mock"
 os.environ["EVSHARE_UPLOAD_DIR"] = tempfile.mkdtemp(prefix="evshare-test-uploads-")
 os.environ["EVSHARE_OTP_RESEND_SECONDS"] = "0"
-os.environ["EVSHARE_MAX_ACTIVE_BOOKINGS"] = "0"  # most tests book several slots; the rule has its own tests
+os.environ["EVSHARE_MAX_ACTIVE_BOOKINGS"] = "0"
+os.environ["EVSHARE_MAX_ACTIVE_HUB_BOOKINGS"] = "0"
+os.environ["EVSHARE_MAX_CHARGERS_PER_HUB"] = "0"  # most tests book several slots; the rule has its own tests
 
 import pytest
 from fastapi.testclient import TestClient

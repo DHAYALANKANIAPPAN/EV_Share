@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog, pill, chip, progress, countdown, startTicker, busy } from "./ui.js";
 
+const usageLimit = (key, fallback) => (S.limits && S.limits[key] !== undefined ? S.limits[key] : fallback);
 const S = { orders: { pending: [], upcoming: [], past: [] }, near: null, radius: "10", live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const where = () => new Promise((ok, no) => navigator.geolocation
@@ -67,7 +68,7 @@ async function go(view) {  // eslint-disable-line
   S.view = view; renderChrome(); render();
   if (view === "verify") await guard(loadVerify)();
   if (view === "bookings") await guard(loadBookings)();
-  if (view === "chargers") await guard(loadMine)();
+  if (view === "chargers" || view === "share") await guard(loadMine)();
   if (view === "orders") await guard(loadOrders)();
   if (view === "dashboard") await guard(loadDashboard)();
   if (view === "find") await guard(loadChargers)();  // always show fresh availability
@@ -104,7 +105,7 @@ function chargerRow(c) {
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      canReserve() ? (c.is_live ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking") : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
+      canReserve() ? (c.is_live ? (activeBooking() && usageLimit("max_active_bookings", 1) > 0 ? h("button", { className: "btn", disabled: true, textContent: "One booking at a time" }) : h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking")) : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
 }
 function hl(id) {
   S.on = id;
@@ -342,9 +343,10 @@ function ordersView() {
   const stat = (label, n, ic) => h("div", { className: "panel stat" }, h("p", { className: "text-sm text-mute flex items-center gap-2" }, icon(ic, "size-4"), label), h("p", { className: "stat-num", textContent: String(n) }));
   const summary = h("div", { className: "stat-grid" }, stat("New requests", pending.length, "inbox"), stat("Accepted", upcoming.length, "calendar-check"),
     stat("Charging now", running.length, "zap"), stat("Completed", past.filter((o) => o.status === "COMPLETED").length, "check-circle-2"));
-  return h("div", { className: "grid gap-6" }, head, offline, summary,
+  const hubBusy = usageLimit("max_active_hub_bookings", 1) > 0 && S.orders.upcoming.length >= usageLimit("max_active_hub_bookings", 1);
+  return h("div", { className: "grid gap-6" }, head, offline, summary, hubBusy ? h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("info", "size-5 shrink-0 text-accent"), "You have an accepted booking in progress or coming up. You can accept the next request once it has finished or been cancelled.") : null,
     block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), h("span", {}, "Please answer within ", o.hold_expires_at ? countdown(o.hold_expires_at) : "a few minutes", ".")), [
-      h("button", { className: "btn btn-primary", textContent: "Accept", onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
+      h("button", { className: "btn btn-primary", textContent: "Accept", disabled: hubBusy, onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
       h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
     running.length ? block("In progress", running, "", (o) => card(o, h("div", { className: "grid gap-2" }, h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("zap", "size-4"), `Charging until ${tm(o.end_time)}.`), progress(o.start_time, o.end_time)),
       h("button", { className: "btn", textContent: "Mark session done", onclick: guard(async () => {
@@ -399,6 +401,8 @@ function shareView() {
   const hours = h("div", { className: "grid gap-4 sm:grid-cols-3", hidden: true }, f("s-from", "Open from", from), f("s-to", "Open until", to), f("s-tz", "Timezone", tz, "If 'from' is later than 'until', the window runs overnight."));
   const locate = h("button", { className: "btn", type: "button", textContent: "Use my location", onclick: guard(async () => { const p = await new Promise((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(ok, () => no(new Error("We couldn't read your location. Allow location access or enter coordinates."))) : no(new Error("This browser can't share your location. Enter coordinates instead."))); lat.value = p.coords.latitude.toFixed(6); lon.value = p.coords.longitude.toFixed(6); }) });
   const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "List charger" });
+  const atLimit = usageLimit("max_chargers_per_hub", 1) > 0 && S.mine.length >= usageLimit("max_chargers_per_hub", 1);
+  if (atLimit) submit.disabled = true;
   const mapBox = h("div", { className: "panel overflow-hidden isolate h-64", hidden: !window.L, role: "region", "aria-label": "Map. Click to place your charger." });
   let map, mk;
   const setPt = (pan) => {
@@ -414,6 +418,7 @@ function shareView() {
     map.on("click", (e) => { lat.value = e.latlng.lat.toFixed(6); lon.value = e.latlng.lng.toFixed(6); setPt(false); });
   });
   return h("div", { className: "grid gap-6 max-w-2xl" }, h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Share a charger" }), h("p", { className: "text-mute mt-1", textContent: "Add the details drivers need to find and reserve your charger." })),
+    atLimit ? h("div", { className: "panel p-4 text-sm", role: "note" }, "Your hub account already lists a charger. A hub account lists one charger. To add another location, register a second hub account.") : null,
     h("form", { className: "panel p-6 grid gap-4", onsubmit: guard(async (e) => {
       e.preventDefault(); submit.disabled = true;
       const body = { title: title.value, address: addr.value, latitude: +lat.value, longitude: +lon.value, connector_type: conn.value, power_kw: +kw.value, price_per_kwh: +price.value };
@@ -450,13 +455,14 @@ function registerView() {
   const text = (id, key, o = {}) => h("input", { id, value: R[key], required: true, oninput: (e) => (R[key] = e.target.value), ...o });
   const sel = (id, opts, key) => h("select", { id, onchange: (e) => { R[key] = e.target.value; render(); } }, opts.map(([v, t]) => h("option", { value: v, textContent: t, selected: v === R[key] })));
   const need = NEEDS[R.role === "DRIVER" ? "DRIVER" : R.hub];
+  const hubRule = R.role === "HUB" && usageLimit("max_chargers_per_hub", 1) === 1 ? h("p", { className: "text-sm text-mute", textContent: "One hub account lists one charger, and takes one accepted booking at a time." }) : null;
   return h("div", { className: "grid gap-6 max-w-xl" },
     h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Register" }),
       h("p", { className: "text-mute mt-1", textContent: "Everyone is verified before they can book or list a charger. You'll upload your documents right after this step." })),
     stepper(1), noticeBox(),
     h("section", { className: "panel p-5 grid gap-3" }, h("h2", { className: "font-semibold", textContent: "I want to" }), f("r-role", "Account type", sel("r-role", [["DRIVER", "Charge my EV (driver)"], ["HUB", "Share a charger (hub)"]], "role")),
       R.role === "HUB" ? f("r-hub", "My property is a", sel("r-hub", [["HOUSE", "House"], ["SHOP", "Shop or business"]], "hub")) : null,
-      h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
+      hubRule, h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
     h("form", { className: "panel p-5 grid gap-4", onsubmit: guard(async (e) => {
         e.preventDefault(); S.user = await api.register(R.name, R.email, R.pass, R.role, R.role === "HUB" ? R.hub : undefined); S.reg = null;
         renderChrome(); toast("Registered. Next, confirm your email."); await go("verify"); }) },
@@ -511,6 +517,7 @@ const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOSt
 function openDrawer(c) {
   if (!S.user) return openAuth();
   if (S.user.role !== "DRIVER") return toast("Only driver accounts can reserve chargers.", true);
+  if (activeBooking() && usageLimit("max_active_bookings", 1) > 0) return toast("You already have an open booking. Finish or cancel it before booking another.", true);
   if (S.user.verification_status !== "APPROVED") { toast("Verify your account to reserve chargers.", true); return go("verify"); }
   if (!c.is_live) return toast("This hub is offline right now. Try again when it's live.", true);
   const opener = document.activeElement, d = $("#drawer"), s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 2);
@@ -582,6 +589,7 @@ function render() { const m = $("#main"); m.classList.remove("view-enter"); void
 startTicker(() => setTimeout(() => { if (S.view === "bookings") guard(loadBookings)(); else if (S.view === "orders") guard(loadOrders)(); else if (S.view === "find") guard(loadChargers)(); }, 1200));
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
+  S.limits = await api.limits().catch(() => null);
   renderChrome(); await syncLive();
   if (S.user && S.user.role === "HUB") await go("find"); else await guard(loadChargers)();
 })();

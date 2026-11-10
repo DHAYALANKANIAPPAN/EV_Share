@@ -1,3 +1,4 @@
+from ..config import settings
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -48,6 +49,10 @@ def to_out(db, chargers: list[Charger], distances: dict[int, float] | None = Non
 
 @router.post("", response_model=ChargerOut, status_code=status.HTTP_201_CREATED)
 def create_charger(body: ChargerCreate, db: DB, user: ApprovedHub):
+    if settings.max_chargers_per_hub > 0:
+        listed = db.scalar(select(func.count(Charger.id)).where(Charger.owner_id == user.id))
+        if listed >= settings.max_chargers_per_hub:
+            raise HTTPException(status.HTTP_409_CONFLICT, "A hub account can list one charger. Register a new hub account for another location.")
     charger = Charger(owner_id=user.id, **body.model_dump())
     db.add(charger)
     db.commit()

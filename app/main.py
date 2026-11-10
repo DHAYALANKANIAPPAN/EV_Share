@@ -44,6 +44,14 @@ async def security_headers(request: Request, call_next):
     return resp
 
 
+@app.get("/limits", tags=["meta"])
+def limits():
+    """Usage limits the interface follows. The server enforces them either way."""
+    return {"max_active_bookings": settings.max_active_bookings,
+            "max_active_hub_bookings": settings.max_active_hub_bookings,
+            "max_chargers_per_hub": settings.max_chargers_per_hub}
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}

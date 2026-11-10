@@ -143,7 +143,15 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 
 Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar); drivers only get **Find chargers and My bookings**.
 
-### Hubs: Go live
+### Usage rules (one at a time)
+
+- **Driver:** one open booking at a time (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1). An open booking is one that is requested, accepted, or still running. Cancelling or finishing it frees the driver.
+- **Hub:** one accepted booking at a time (`EVSHARE_MAX_ACTIVE_HUB_BOOKINGS`, default 1). A hub cannot accept a second request until its current booking is finished or cancelled. Requests can still arrive; they wait until the hub is free, or the hub declines them.
+- **Hub account:** one charger per hub account (`EVSHARE_MAX_CHARGERS_PER_HUB`, default 1). A second location needs a second hub account.
+
+Set any of these to `0` for no limit. The server enforces them; the screens read the same values from `GET /limits`.
+
+## Hubs: Go live
 
 Approved hubs see a **Go live** bar at the bottom of every page. Pressing it sends the device's location; the hub goes live only if it is within `EVSHARE_LIVE_RADIUS_M` (default 500 m) of one of its chargers, and only those nearby chargers are live. While the page stays open it re-checks the location every 5 minutes; if the pings stop, the hub goes offline `EVSHARE_LIVE_TTL_MINUTES` (default 30) after the last one, and a ping from away from every charger takes it offline immediately. Drivers can only reserve **live** chargers (offline ones are listed as "Hub offline"); bookings that already exist are not affected. `GET /chargers?live_only=true` returns just the live ones.
 

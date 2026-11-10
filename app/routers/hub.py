@@ -100,6 +100,11 @@ def accept_order(booking_id: int, db: DB, user: ApprovedHub):
     expire_unpaid(db)
     booking = _own_order(db, booking_id, user)
     _answerable(booking)
+    if settings.max_active_hub_bookings > 0:
+        busy = db.scalar(select(func.count(Booking.id)).join(Charger, Charger.id == Booking.charger_id).where(
+            Charger.owner_id == user.id, Booking.status == BookingStatus.CONFIRMED, Booking.end_time > utcnow(), Booking.id != booking.id))
+        if busy >= settings.max_active_hub_bookings:
+            raise HTTPException(status.HTTP_409_CONFLICT, "You already have an accepted booking in progress or coming up. Finish or cancel it before accepting another.")
     booking.status, booking.accepted_at = BookingStatus.CONFIRMED, utcnow()
     db.commit()
     pay = " Open EV Share > My bookings to pay and get directions." if booking.estimated_cost > 0 else " Open EV Share > My bookings for directions."
