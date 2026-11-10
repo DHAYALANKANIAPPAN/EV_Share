@@ -1,3 +1,13 @@
+import asyncio
+import json
+
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func
+from starlette.concurrency import run_in_threadpool
+
+from ..database import SessionLocal
+from ..models import Payment, PaymentStatus, Review
+from ..schemas import ChargerStatOut, DashboardOut
 from datetime import timedelta
 from typing import Literal
 
@@ -108,3 +118,76 @@ def decline_order(booking_id: int, body: DeclineIn, db: DB, user: ApprovedHub):
     notify(booking.driver.email, "Your charging request was declined",
            f"'{booking.charger.title}' couldn't take your request." + (f" Reason: {booking.decline_reason}" if booking.decline_reason else "") + " You haven't been charged. You can try another charger.")
     return booking
+
+
+def order_counts(db, user_id: int) -> dict:
+    """How many requests, upcoming and running bookings this hub has. The stream sends these when they change."""
+    now = utcnow()
+    base = select(func.count(Booking.id)).join(Charger, Charger.id == Booking.charger_id).where(Charger.owner_id == user_id)
+    return {
+        "pending": db.scalar(base.where(Booking.status == BookingStatus.REQUESTED, Booking.end_time > now)),
+        "upcoming": db.scalar(base.where(Booking.status == BookingStatus.CONFIRMED, Booking.start_time > now)),
+        "running": db.scalar(base.where(Booking.status == BookingStatus.CONFIRMED, Booking.start_time <= now, Booking.end_time > now)),
+    }
+
+
+def sse_frame(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+
+@router.get("/stream")
+async def order_stream(user: ApprovedHub):
+    """Live updates for the Orders page (server-sent events). The browser reconnects by itself if the connection drops."""
+    user_id = user.id
+
+    def snapshot():
+        with SessionLocal() as s:
+            expire_unpaid(s)
+            return order_counts(s, user_id)
+
+    async def events():
+        last = None
+        while True:
+            counts = await run_in_threadpool(snapshot)
+            if counts != last:
+                yield sse_frame("orders", counts)
+                last = counts
+            else:
+                yield ": keep-alive\n\n"  # comment line: keeps proxies from closing an idle connection
+            await asyncio.sleep(settings.stream_interval_seconds)
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+@router.get("/dashboard", response_model=DashboardOut)
+def dashboard(db: DB, user: ApprovedHub):
+    """Sessions and earnings for this hub. Earnings are gross estimates (no commission or payouts yet)."""
+    expire_unpaid(db)
+    since = utcnow() - timedelta(days=30)
+    chargers = db.scalars(select(Charger).where(Charger.owner_id == user.id).order_by(Charger.id)).all()
+    done = db.scalars(select(Booking).join(Charger, Charger.id == Booking.charger_id).where(
+        Charger.owner_id == user.id, Booking.status == BookingStatus.COMPLETED)).all()
+
+    def earned(b) -> float:
+        return float(b.estimated_cost) if b.payment and b.payment.status == PaymentStatus.PAID else 0.0
+
+    ratings = {cid: (round(float(avg), 2), n) for cid, avg, n in db.execute(
+        select(Review.charger_id, func.avg(Review.rating), func.count(Review.id)).join(Charger, Charger.id == Review.charger_id)
+        .where(Charger.owner_id == user.id).group_by(Review.charger_id)).all()}
+    per = {c.id: {"sessions": 0, "earnings": 0.0} for c in chargers}
+    for b in done:
+        per.setdefault(b.charger_id, {"sessions": 0, "earnings": 0.0})
+        per[b.charger_id]["sessions"] += 1
+        per[b.charger_id]["earnings"] += earned(b)
+    total_reviews = sum(n for _, n in ratings.values())
+    overall = round(sum(avg * n for avg, n in ratings.values()) / total_reviews, 2) if total_reviews else None
+    recent = [b for b in done if b.end_time >= since]
+    return DashboardOut(
+        sessions_total=len(done), sessions_30d=len(recent),
+        earnings_total=round(sum(earned(b) for b in done), 2), earnings_30d=round(sum(earned(b) for b in recent), 2),
+        avg_rating=overall, review_count=total_reviews,
+        chargers=[ChargerStatOut(charger_id=c.id, title=c.title, sessions=per[c.id]["sessions"],
+                                 earnings=round(per[c.id]["earnings"], 2), avg_rating=ratings.get(c.id, (None, 0))[0],
+                                 review_count=ratings.get(c.id, (None, 0))[1]) for c in chargers],
+    )

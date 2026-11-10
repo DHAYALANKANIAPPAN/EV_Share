@@ -18,7 +18,7 @@ async function syncLive() {
   if (!isHub()) S.live = null; else { try { S.live = await api.liveStatus(); } catch { S.live = null; } }
   const on = !!(S.live && S.live.is_live);
   if (on && !beat) beat = setInterval(heartbeat, 5 * 60 * 1000); else if (!on && beat) { clearInterval(beat); beat = null; }
-  if (isHub() && !orderTimer) { orderTimer = setInterval(pollOrders, 20000); pollOrders(); } else if (!isHub() && orderTimer) { clearInterval(orderTimer); orderTimer = null; }
+  if (isHub() && !orderTimer) { orderTimer = setInterval(pollOrders, 20000); pollOrders(); startOrderStream(); } else if (!isHub() && orderTimer) { clearInterval(orderTimer); orderTimer = null; stopOrderStream(); }
   renderLiveBar();
 }
 async function heartbeat() {  // re-checks the hub's location while the page is open; going out of range takes the hub offline
@@ -50,7 +50,7 @@ function renderChrome() {
   const u = S.user, ok = u && u.verification_status === "APPROVED", hub = u && u.role === "HUB", n = S.orders.pending.length;
   nav.replaceChildren(...[!hub ? tab("find", "Find chargers") : null,
     ok && !hub ? tab("bookings", "My bookings") : null,
-    ok && hub ? tab("orders", n ? `Orders (${n})` : "Orders") : null, ok && hub ? tab("chargers", "My chargers") : null, ok && hub ? tab("share", "Share a charger") : null,
+    ok && hub ? tab("orders", n ? `Orders (${n})` : "Orders") : null, ok && hub ? tab("dashboard", "Dashboard") : null, ok && hub ? tab("chargers", "My chargers") : null, ok && hub ? tab("share", "Share a charger") : null,
     u && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
@@ -69,6 +69,7 @@ async function go(view) {  // eslint-disable-line
   if (view === "bookings") await guard(loadBookings)();
   if (view === "chargers") await guard(loadMine)();
   if (view === "orders") await guard(loadOrders)();
+  if (view === "dashboard") await guard(loadDashboard)();
   if (view === "find") await guard(loadChargers)();  // always show fresh availability
 }
 
@@ -263,6 +264,34 @@ function openReviewForm(b) {
 
 /* ---------- hub: orders ---------- */
 let orderTimer = null;
+let orderStream = null;
+function startOrderStream() {  // the server pushes a message when an order changes; the 20-second check stays as a fallback
+  if (orderStream || !("EventSource" in window)) return;
+  orderStream = new EventSource("/hub/stream");
+  orderStream.addEventListener("orders", () => pollOrders());
+}
+function stopOrderStream() { if (orderStream) { orderStream.close(); orderStream = null; } }
+async function loadDashboard() {
+  S.loading = true; render();
+  try { S.dash = await api.hubDashboard(); } catch (e) { toast(e.message, true); }
+  finally { S.loading = false; render(); }
+}
+const stat = (label, value, ic) => h("div", { className: "panel stat" }, h("p", { className: "text-sm text-mute flex items-center gap-2" }, icon(ic, "size-4"), label), h("p", { className: "stat-num", textContent: value }));
+function dashboardView() {
+  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Dashboard" }),
+    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Your sessions, earnings and ratings. Earnings are gross estimates before any commission. Payouts are not paid out yet." }));
+  if (S.loading || !S.dash) return h("div", { className: "grid gap-6" }, head, skeleton());
+  const d = S.dash;
+  const rating = d.avg_rating == null ? "No reviews yet" : `${d.avg_rating.toFixed(1)} ★ (${d.review_count})`;
+  const cards = h("div", { className: "stat-grid" }, stat("Sessions, all time", String(d.sessions_total), "check-circle-2"), stat("Sessions, last 30 days", String(d.sessions_30d), "calendar"),
+    stat("Earnings, all time", money(d.earnings_total), "wallet"), stat("Earnings, last 30 days", money(d.earnings_30d), "banknote"), stat("Average rating", rating, "star"));
+  const rows = d.chargers.length
+    ? h("ul", { className: "panel overflow-hidden" }, d.chargers.map((c) => h("li", { className: "row" },
+        h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.sessions} session(s), ${money(c.earnings)} earned` })),
+        h("p", { className: "text-sm self-center", textContent: c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} ★ (${c.review_count})` }))))
+    : h("p", { className: "panel p-4 text-sm text-mute", textContent: "List a charger to see its numbers here." });
+  return h("div", { className: "grid gap-6" }, head, cards, h("h2", { className: "font-semibold", textContent: "By charger" }), rows);
+}
 async function loadOrders() {
   S.loading = true; render();
   try { const [pending, upcoming, past] = await Promise.all(["pending", "upcoming", "past"].map((x) => api.hubOrders(x))); S.orders = { pending, upcoming, past }; }
@@ -529,7 +558,7 @@ function openForgot(prefill = "") {
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.classList.remove("view-enter"); void m.offsetWidth; m.classList.add("view-enter"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.classList.remove("view-enter"); void m.offsetWidth; m.classList.add("view-enter"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView, dashboard: dashboardView }[S.view]()); refreshIcons(); }
 startTicker(() => setTimeout(() => { if (S.view === "bookings") guard(loadBookings)(); else if (S.view === "orders") guard(loadOrders)(); else if (S.view === "find") guard(loadChargers)(); }, 1200));
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }

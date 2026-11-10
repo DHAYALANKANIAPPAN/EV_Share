@@ -330,3 +330,23 @@ class ResetIn(BaseModel):
     email: EmailStr
     code: str = Field(pattern=r"^\d{6}$")
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# ---- hub dashboard ----
+class ChargerStatOut(BaseModel):
+    charger_id: int
+    title: str
+    sessions: int
+    earnings: float
+    avg_rating: float | None = None
+    review_count: int = 0
+
+
+class DashboardOut(BaseModel):
+    sessions_total: int
+    sessions_30d: int
+    earnings_total: float
+    earnings_30d: float
+    avg_rating: float | None
+    review_count: int
+    chargers: list[ChargerStatOut]
