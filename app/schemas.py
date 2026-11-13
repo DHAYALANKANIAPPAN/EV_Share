@@ -342,6 +342,12 @@ class ChargerStatOut(BaseModel):
     review_count: int = 0
 
 
+class DailyOut(BaseModel):
+    day: str
+    sessions: int
+    earnings: float
+
+
 class DashboardOut(BaseModel):
     sessions_total: int
     sessions_30d: int
@@ -350,3 +356,4 @@ class DashboardOut(BaseModel):
     avg_rating: float | None
     review_count: int
     chargers: list[ChargerStatOut]
+    daily: list[DailyOut] = []

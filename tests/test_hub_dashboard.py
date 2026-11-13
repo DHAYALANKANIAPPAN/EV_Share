@@ -67,3 +67,18 @@ def test_stream_route_is_event_stream_and_requires_an_approved_hub(client):
     driver = register_and_login(client, "b@example.com", "Bala")
     assert client.get("/hub/stream", headers=driver).status_code == 403
     assert client.get("/hub/stream").status_code == 401
+
+
+def test_dashboard_has_14_days_that_add_up(client):
+    host = register_and_login(client)
+    cid = client.post("/chargers", json=CHARGER, headers=host).json()["id"]
+    driver = register_and_login(client, "b@example.com", "Bala")
+    bid = paid_booking(client, host, driver, cid)
+    start_now(client, bid)
+    client.post(f"/bookings/{bid}/finish", headers=driver)
+    d = client.get("/hub/dashboard", headers=host).json()
+    assert len(d["daily"]) == 14
+    assert sum(x["sessions"] for x in d["daily"]) == d["sessions_30d"] == 1
+    assert round(sum(x["earnings"] for x in d["daily"]), 2) == d["earnings_30d"] == 74.0
+    days = [x["day"] for x in d["daily"]]
+    assert days == sorted(days)
