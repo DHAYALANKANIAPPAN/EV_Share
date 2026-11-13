@@ -49,7 +49,7 @@ function renderChrome() {
   const nav = $("#nav"), user = $("#user");
   const tab = (id, label) => h("button", { className: "tab" + (S.view === id ? " is-active" : ""), textContent: label, onclick: () => go(id), "aria-current": S.view === id ? "page" : null });
   const u = S.user, ok = u && u.verification_status === "APPROVED", hub = u && u.role === "HUB", n = S.orders.pending.length;
-  nav.replaceChildren(...[!hub ? tab("find", "Find chargers") : null,
+  nav.replaceChildren(...[!u ? null : !hub ? tab("find", "Find chargers") : null,
     ok && !hub ? tab("bookings", "My bookings") : null,
     ok && hub ? tab("orders", n ? `Orders (${n})` : "Orders") : null, ok && hub ? tab("dashboard", "Dashboard") : null, ok && hub ? tab("chargers", "My chargers") : null, ok && hub ? tab("share", "Share a charger") : null,
     u && !ok ? tab("verify", "Verify account") : null].filter(Boolean));
@@ -540,6 +540,48 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
+/* ---------- landing page for visitors: a short headline and an animated scene ---------- */
+const LANDING_SCENE = `
+<svg viewBox="0 0 640 400" role="img" aria-label="An electric car drives along a road while a plug charges a battery" class="landing-svg">
+  <defs><radialGradient id="landing-glow" cx="50%" cy="38%" r="55%"><stop offset="0" stop-color="rgb(52 211 153 / .22)"/><stop offset="1" stop-color="rgb(52 211 153 / 0)"/></radialGradient></defs>
+  <rect width="640" height="400" fill="url(#landing-glow)"/>
+  <g>
+    <rect x="236" y="112" width="168" height="92" rx="16" class="batt-shell"/>
+    <rect x="404" y="140" width="14" height="36" rx="4" class="batt-shell"/>
+    <rect x="252" y="128" width="136" height="60" rx="10" class="batt-well"/>
+    <rect class="batt-fill" x="256" y="132" width="128" height="52" rx="8"/>
+    <path class="bolt" d="M330 136 L312 166 H328 L320 186 L346 154 H330 Z"/>
+  </g>
+  <g class="plug">
+    <rect x="442" y="138" width="40" height="38" rx="8" class="plug-body"/>
+    <rect x="418" y="146" width="26" height="6" rx="2" class="plug-pin"/>
+    <rect x="418" y="162" width="26" height="6" rx="2" class="plug-pin"/>
+  </g>
+  <line x1="0" y1="318" x2="640" y2="318" class="road-line"/>
+  <g class="drive-far"><g transform="translate(0 232) scale(-.65 .65)">${carShape("car-body-far")}</g></g>
+  <g class="drive-near"><g transform="translate(0 252)">${carShape("car-body")}</g></g>
+</svg>`;
+function carShape(body) {
+  return `<path d="M6 46 C6 30 14 26 30 24 L58 16 C70 12 80 2 98 2 L134 2 C146 2 152 12 162 22 L178 28 C188 30 190 36 190 46 L190 54 L6 54 Z" class="${body}"/>` +
+    `<path d="M64 24 L86 8 L124 8 L142 24 Z" class="car-glass"/>` +
+    `<circle cx="46" cy="54" r="12" class="car-tyre"/><circle cx="150" cy="54" r="12" class="car-tyre"/>` +
+    `<circle cx="46" cy="54" r="5" class="car-rim"/><circle cx="150" cy="54" r="5" class="car-rim"/>`;
+}
+function landingView() {
+  const scene = h("div", { className: "landing-scene", "aria-hidden": "true" });
+  scene.innerHTML = LANDING_SCENE;
+  return h("section", { className: "landing" },
+    h("div", { className: "grid gap-6" },
+      h("p", { className: "landing-kicker", textContent: "Electric, sorted" }),
+      h("h1", { className: "landing-title", textContent: "Plug in. Power up. Go." }),
+      h("p", { className: "landing-sub", textContent: "Find power on your route, pay in a tap, and be back on the road in minutes." }),
+      h("div", { className: "landing-actions" },
+        h("button", { className: "btn btn-primary btn-lg", textContent: "Get started", onclick: () => openRolePicker("register") }),
+        h("button", { className: "btn btn-lg", textContent: "Log in", onclick: () => openRolePicker("login") })),
+      h("ul", { className: "landing-points" }, ["Pay in a tap", "Only live options", "Back on the road fast"].map((t) => h("li", { className: "landing-point", textContent: t })))),
+    scene);
+}
+
 /* ---------- choose Driver or Hub first, then register or log in for that role ---------- */
 function openRolePicker(mode) {
   const d = $("#dlg"), opener = document.activeElement;
@@ -568,7 +610,7 @@ function openAuth(role) {
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value, role); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
     h("h2", { className: "text-xl font-semibold", textContent: role === "HUB" ? "Hub login" : role === "DRIVER" ? "Driver login" : "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
@@ -604,7 +646,7 @@ function openForgot(prefill = "") {
 }
 
 /* ---------- boot ---------- */
-function render() { const m = $("#main"); m.classList.remove("view-enter"); void m.offsetWidth; m.classList.add("view-enter"); m.replaceChildren({ find: findView, bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView, dashboard: dashboardView }[S.view]()); refreshIcons(); }
+function render() { const m = $("#main"); m.classList.remove("view-enter"); void m.offsetWidth; m.classList.add("view-enter"); m.replaceChildren({ find: () => (S.user ? findView() : landingView()), bookings: bookingsView, chargers: mineView, share: shareView, verify: verifyView, register: registerView, orders: ordersView, dashboard: dashboardView }[S.view]()); refreshIcons(); }
 startTicker(() => setTimeout(() => { if (S.view === "bookings") guard(loadBookings)(); else if (S.view === "orders") guard(loadOrders)(); else if (S.view === "find") guard(loadChargers)(); }, 1200));
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }

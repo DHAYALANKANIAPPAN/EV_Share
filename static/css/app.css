@@ -180,3 +180,43 @@ dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
 .role-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: rgb(var(--accent) / .12); color: rgb(var(--accent)); flex: none; }
 .role-arrow { margin-left: auto; color: rgb(var(--mute)); transition: transform .2s ease-out, color .2s ease-out; }
 .role-card:hover .role-arrow { transform: translateX(3px); color: rgb(var(--accent)); }
+
+/* 14 ── landing page: headline, actions and the animated scene ───────────────── */
+.landing { display: grid; gap: 40px; align-items: center; min-height: calc(100vh - 170px); padding: 32px 0 24px; }
+@media (min-width: 1024px) { .landing { grid-template-columns: 1fr 1.1fr; gap: 56px; } }
+.landing-kicker { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: rgb(var(--accent)); }
+.landing-title { font-size: clamp(2.6rem, 6.4vw, 5rem); line-height: .96; letter-spacing: -.04em; font-weight: 600; }
+.landing-sub { font-size: 1.125rem; line-height: 1.6; color: rgb(var(--mute)); max-width: 40ch; }
+.landing-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.btn-lg { min-height: 52px; padding: 0 24px; font-size: 16px; }
+.landing-scene { position: relative; aspect-ratio: 16 / 10; border: 1px solid rgb(var(--line)); border-radius: 24px; overflow: hidden; background-color: rgb(var(--panel));
+  background-image: linear-gradient(rgb(var(--line) / .35) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--line) / .35) 1px, transparent 1px);
+  background-size: 32px 32px; }
+.landing-svg { width: 100%; height: 100%; display: block; }
+.car-body { fill: rgb(var(--accent)); }
+.car-body-far { fill: rgb(var(--mute)); opacity: .55; }
+.car-glass { fill: rgb(var(--canvas)); opacity: .8; }
+.car-tyre { fill: rgb(var(--ink)); }
+.car-rim { fill: rgb(var(--mute)); }
+.road-line { stroke: rgb(var(--line)); stroke-width: 4; stroke-dasharray: 24 18; animation: landing-road .8s linear infinite; }
+.batt-shell { fill: none; stroke: rgb(var(--mute)); stroke-width: 3; }
+.batt-well { fill: rgb(var(--canvas)); }
+.batt-fill { fill: rgb(var(--accent)); transform-box: fill-box; transform-origin: left center; animation: landing-fill 4s ease-in-out infinite; }
+.bolt { fill: rgb(var(--accent)); animation: landing-blink 1.2s ease-in-out infinite; }
+.plug { animation: landing-plug 4s ease-in-out infinite; }
+.plug-body { fill: rgb(var(--ink)); }
+.plug-pin { fill: rgb(var(--mute)); }
+.drive-near { animation: landing-drive-right 7s linear infinite; }
+.drive-far { animation: landing-drive-left 9s linear infinite; }
+@keyframes landing-road { to { stroke-dashoffset: -42px; } }
+@keyframes landing-drive-right { from { transform: translateX(-220px); } to { transform: translateX(700px); } }
+@keyframes landing-drive-left { from { transform: translateX(700px); } to { transform: translateX(-260px); } }
+@keyframes landing-plug { 0%, 12% { transform: translateX(150px); } 40%, 75% { transform: translateX(0); } 100% { transform: translateX(150px); } }
+@keyframes landing-fill { 0%, 40% { transform: scaleX(.15); } 75%, 100% { transform: scaleX(.9); } }
+@keyframes landing-blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* landing points under the buttons */
+.landing-points { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin-top: 16px; }
+.landing-point { padding: 6px 14px; border: 1px solid rgb(var(--line)); border-radius: 999px; background: rgb(var(--panel)); font-size: 13px; color: rgb(var(--mute)); transition: border-color .2s ease-out, color .2s ease-out; }
+.landing-point:hover { border-color: rgb(var(--accent)); color: rgb(var(--ink)); }
+.landing-scene::after { content: ""; position: absolute; inset: auto 0 0 0; height: 30%; pointer-events: none; background: linear-gradient(to top, rgb(var(--panel)), transparent); }
