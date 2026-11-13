@@ -56,7 +56,7 @@ function renderChrome() {
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
       h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.orders = { pending: [], upcoming: [], past: [] }; S.view = "find"; renderChrome(); await syncLive(); go("find"); toast("Signed out"); } })]
-    : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => go("register") })]));
+    : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openRolePicker("login") }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => openRolePicker("register") })]));
   refreshIcons();
 }
 async function go(view) {  // eslint-disable-line
@@ -86,12 +86,12 @@ function filterBar() {
   const sel = h("select", { id: "f-conn", onchange: (e) => { S.f.connector = e.target.value; reload(); } }, h("option", { value: "", textContent: "Any" }), CONNECTORS.map((c) => h("option", { value: c, textContent: c.replace("_", " "), selected: S.f.connector === c })));
   const num = (id, key, min) => h("input", { id, type: "number", min, step: "any", value: S.f[key], placeholder: "No limit", onchange: (e) => { S.f[key] = e.target.value; reload(); } });
   const lab = (id, text, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: text }), el);
-  const radius = h("select", { id: "f-radius", onchange: (e) => { S.radius = e.target.value; reload(); } }, ["2", "5", "10", "25", "50"].map((r) => h("option", { value: r, textContent: `${r} km`, selected: S.radius === r })));
+  const radius = h("select", { id: "f-radius", onchange: (e) => { S.radius = e.target.value; reload(); } }, ["25", "50", "100", "150", "200"].map((r) => h("option", { value: r, textContent: `${r} km`, selected: S.radius === r })));
   const nearRow = h("div", { className: "flex flex-wrap items-end gap-3" },
     h("button", { id: "btn-near", className: "btn " + (S.near ? "" : "btn-primary"), onclick: guard(async () => { const p = await where(); S.near = { lat: p.latitude, lon: p.longitude }; await loadChargers(); }) }, icon("locate-fixed", "size-4"), S.near ? "Update my location" : "Chargers near me"),
-    S.near ? lab("f-radius", "Within", radius) : null,
+    S.near ? lab("f-radius", "My car's driving range", radius) : null,
     S.near ? h("button", { className: "btn", textContent: "Show all live chargers", onclick: () => { S.near = null; reload(); } }) : null,
-    h("p", { className: "text-sm text-mute" }, S.near ? `Live chargers within ${S.radius} km of you, nearest first.` : "Showing every charger that is live right now."));
+    h("p", { className: "text-sm text-mute" }, S.near ? `Live chargers within ${S.radius} km of you (your car's range), nearest first.` : "Showing every charger that is live right now."));
   return h("div", { className: "panel p-4 grid gap-4" }, nearRow, h("div", { className: "grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] items-end" },
     lab("f-conn", "Connector", sel), lab("f-power", "Minimum power (kW)", num("f-power", "power", 1)), lab("f-price", "Maximum price (₹/kWh)", num("f-price", "price", 0)),
     h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; reload(); } })));
@@ -156,17 +156,16 @@ function emptyFind() {
 }
 /* visitors: a short welcome that explains the product in three steps */
 function welcomePanel() {
-  return h("section", { className: "panel hero p-6 md:p-8 grid gap-6", "aria-labelledby": "welcome-title" },
-    h("div", { className: "grid gap-2 max-w-2xl" },
-      h("p", { className: "text-sm text-accent font-medium", textContent: "Charge your EV at a home or shop near you" }),
-      h("h2", { id: "welcome-title", className: "text-2xl md:text-3xl font-semibold tracking-tight", textContent: "Book a live charger in three steps" }),
-      h("p", { className: "text-mute", textContent: "Hosts share chargers at their home or shop. You only see chargers that are live right now, so what you book is ready." })),
-    h("ol", { className: "grid gap-4 md:grid-cols-3" }, [["Find", "Pick a live charger on the map, or near you."], ["Request", "Choose a time. The host accepts or declines."], ["Pay and charge", "Pay once accepted, follow the directions, and charge."]]
-      .map(([t, d], i) => h("li", { className: "step-card" }, h("span", { className: "step-num", textContent: String(i + 1) }), h("h3", { className: "font-medium", textContent: t }), h("p", { className: "text-sm text-mute", textContent: d })))),
+  return h("section", { className: "panel hero p-6 md:p-10 grid gap-8", "aria-labelledby": "welcome-title" },
+    h("div", { className: "grid gap-3 max-w-2xl" },
+      h("p", { className: "dash-kicker", textContent: "EV charging, near you" }),
+      h("h2", { id: "welcome-title", className: "text-3xl md:text-4xl font-semibold tracking-tight", textContent: "Charge at a live charger near you, or earn from your own." }),
+      h("p", { className: "text-mute text-base md:text-lg", textContent: "Hosts share chargers at home or in their shop. You only see chargers that are live right now, so what you book is ready when you arrive." })),
     h("div", { className: "flex flex-wrap gap-3" },
-      h("button", { className: "btn btn-primary", textContent: "Create an account", onclick: () => go("register") }),
-      h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }),
-      h("button", { className: "btn border-transparent text-mute", textContent: "Share a charger instead", onclick: () => { S.reg = { name: "", email: "", pass: "", role: "HUB", hub: "HOUSE" }; go("register"); } })));
+      h("button", { className: "btn btn-primary", textContent: "Get started", onclick: () => openRolePicker("register") }),
+      h("button", { className: "btn", textContent: "Login", onclick: () => openRolePicker("login") })),
+    h("ol", { className: "grid gap-4 md:grid-cols-3" }, [["Enter your car's range", "Tell us how far your car can go, and where you are."], ["Request a live hub", "The host has 3 minutes to accept. Their answer arrives as a live update."], ["Charge and pay", "The host confirms your arrival and the charging time. You pay, then charge."]]
+      .map(([t, d], i) => h("li", { className: "step-card" }, h("span", { className: "step-num", textContent: String(i + 1) }), h("h3", { className: "font-medium", textContent: t }), h("p", { className: "text-sm text-mute", textContent: d })))));
 }
 function findView() {
   const list = S.loading ? skeleton() : S.chargers.length ? h("ul", { className: "panel overflow-hidden" }, S.chargers.map(chargerRow)) : emptyFind();
@@ -541,8 +540,28 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
+/* ---------- choose Driver or Hub first, then register or log in for that role ---------- */
+function openRolePicker(mode) {
+  const d = $("#dlg"), opener = document.activeElement;
+  d.onclose = () => opener && opener.focus && opener.focus();
+  const card = (role, title, text, ic) => h("button", { type: "button", className: "role-card", "aria-label": `${title}: ${text}`, onclick: () => {
+      d.close();
+      if (mode === "register") { S.reg = { name: "", email: "", pass: "", role, hub: "HOUSE" }; go("register"); }
+      else openAuth(role); } },
+    h("span", { className: "role-icon" }, icon(ic, "size-6")),
+    h("span", { className: "grid gap-1 text-left" }, h("span", { className: "font-semibold text-lg", textContent: title }), h("span", { className: "text-sm text-mute", textContent: text })),
+    h("span", { className: "role-arrow" }, icon("arrow-right", "size-5")));
+  d.replaceChildren(h("div", { className: "grid gap-5" },
+    h("div", { className: "grid gap-1" }, h("p", { className: "dash-kicker", textContent: mode === "register" ? "Create an account" : "Welcome back" }),
+      h("h2", { className: "text-2xl font-semibold tracking-tight", textContent: "Are you here to charge or to host?" })),
+    card("DRIVER", "I drive an EV", "Find a live charger near you and book it", "car"),
+    card("HUB", "I have a charger", "Host a charger at your home or shop and earn", "plug-zap"),
+    h("div", { className: "flex justify-end" }, h("button", { className: "btn border-transparent text-mute", textContent: "Cancel", onclick: () => d.close() }))));
+  d.showModal();
+}
+
 /* ---------- login (drivers and hubs) ---------- */
-function openAuth() {
+function openAuth(role) {
   const d = $("#dlg"), opener = document.activeElement;
   const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password", className: "flex-1" });
   const showPass = h("button", { type: "button", className: "btn sm", textContent: "Show", "aria-label": "Show password", onclick: (e) => { const shown = pass.type === "text"; pass.type = shown ? "password" : "text"; e.currentTarget.textContent = shown ? "Show" : "Hide"; } });
@@ -552,7 +571,7 @@ function openAuth() {
       e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
-    h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
+    h("h2", { className: "text-xl font-semibold", textContent: role === "HUB" ? "Hub login" : role === "DRIVER" ? "Driver login" : "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
     h("button", { className: "btn btn-primary", type: "submit", textContent: "Login" }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Forgot password?", onclick: () => { d.close(); openForgot(email.value); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "New here? Register", onclick: () => { d.close(); go("register"); } }),

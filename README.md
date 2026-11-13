@@ -136,7 +136,7 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 ### How a booking works
 
 1. A **driver** sees only chargers whose hub is **live now** (optionally "Chargers near me", nearest first) and sends a **request** for a time slot. The slot is held.
-2. The **hub** sees it under **Orders** (new requests are checked every 20 s and counted in the menu) and **accepts or declines** within `EVSHARE_HUB_RESPONSE_MINUTES` (default 20), otherwise the request is cancelled. Both sides are emailed.
+2. The **hub** sees it under **Orders** (new requests are checked every 20 s and counted in the menu) and **accepts or declines** within `EVSHARE_HUB_RESPONSE_MINUTES` (default 3), otherwise the request is cancelled. Both sides are emailed.
 3. After acceptance the driver sees the exact address and a **Directions** link and **pays** within `EVSHARE_UNPAID_HOLD_MINUTES` (default 15), otherwise the slot is released. Declined or cancelled requests are never charged; paid cancellations are refunded.
 
 4. During the session the hub's Orders page shows it under **In progress** and the driver's bookings show **Session in progress**. Either side can **end the session** when charging is done: the booking becomes *Completed*, the rest of the slot is freed, and the driver can leave a review. While a session runs the charger shows **In use until ...** to other drivers. A driver holds **one open booking at a time** (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1): they can book again once it is finished, cancelled or declined.
@@ -147,6 +147,7 @@ Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar)
 
 - **Driver:** one open booking at a time (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1). An open booking is one that is requested, accepted, or still running. Cancelling or finishing it frees the driver.
 - **Hub:** one accepted booking at a time (`EVSHARE_MAX_ACTIVE_HUB_BOOKINGS`, default 1). A hub cannot accept a second request until its current booking is finished or cancelled. Requests can still arrive; they wait until the hub is free, or the hub declines them.
+- **Response window:** a hub has 3 minutes to accept or decline a request (`EVSHARE_HUB_RESPONSE_MINUTES`).
 - **Hub account:** one charger per hub account (`EVSHARE_MAX_CHARGERS_PER_HUB`, default 1). A second location needs a second hub account.
 
 Set any of these to `0` for no limit. The server enforces them; the screens read the same values from `GET /limits`.

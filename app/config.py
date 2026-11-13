@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     max_chargers_per_hub: int = 1     # chargers one hub account may list; 0 = no limit
     max_active_bookings: int = 1  # open requests/sessions a driver may hold at once; 0 = no limit
     stream_interval_seconds: int = 5  # how often the live order stream checks for changes
-    hub_response_minutes: int = 20  # a booking request the hub has not answered in this time is cancelled; 0 disables
+    hub_response_minutes: int = 3  # a booking request the hub has not answered in this time is cancelled; 0 disables
     unpaid_hold_minutes: int = 15  # unpaid bookings are released after this long; 0 disables
     default_timezone: str = "Asia/Kolkata"
 
