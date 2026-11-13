@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 
@@ -27,7 +27,7 @@ def register(body: UserCreate, db: DB):
     return user
 
 
-def _authenticate(request: Request, response: Response, form, db, staff: bool) -> Token:
+def _authenticate(request: Request, response: Response, form, db, staff: bool, expected_role: str | None = None) -> Token:
     """Shared by both entrances. Reviewers can only use the staff entrance, everyone else only the public one.
     A wrong entrance gets the same 'incorrect email or password' answer, so it reveals nothing."""
     email = form.username.lower()
@@ -39,6 +39,10 @@ def _authenticate(request: Request, response: Response, form, db, staff: bool) -
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
     if not user.is_active:  # only revealed after the password was right
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been removed. Check your email for the reason, or register again with a different email address.")
+    if expected_role is not None and user.role.value != expected_role:
+        other = "hub" if user.role.value == "HUB" else "driver"
+        chosen = "Hub" if other == "hub" else "Driver"
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"This is a {other} account. Choose {chosen} to log in instead.")
     login_limiter.reset(key)
     token = create_access_token(user.id, user.password_hash)
     response.set_cookie(COOKIE_NAME, token, max_age=settings.access_token_minutes * 60, httponly=True,
@@ -47,8 +51,12 @@ def _authenticate(request: Request, response: Response, form, db, staff: bool) -
 
 
 @router.post("/login", response_model=Token)
-def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
-    return _authenticate(request, response, form, db, staff=False)
+def login(request: Request, response: Response, form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB,
+          expected_role: Annotated[str | None, Form()] = None):
+    """expected_role (DRIVER or HUB) is the option the person picked on the sign-in screen. A mismatch is refused."""
+    if expected_role not in (None, "DRIVER", "HUB"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "expected_role must be DRIVER or HUB")
+    return _authenticate(request, response, form, db, staff=False, expected_role=expected_role)
 
 
 @router.post("/staff/login", response_model=Token, include_in_schema=False)

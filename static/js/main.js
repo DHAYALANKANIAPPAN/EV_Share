@@ -577,7 +577,8 @@ function landingView() {
       h("p", { className: "landing-sub", textContent: "Find power on your route, pay in a tap, and be back on the road in minutes." }),
       h("div", { className: "landing-actions" },
         h("button", { className: "btn btn-primary btn-lg", textContent: "Get started", onclick: () => openRolePicker("register") }),
-        h("button", { className: "btn btn-lg", textContent: "Log in", onclick: () => openRolePicker("login") }))),
+        h("button", { className: "btn btn-lg", textContent: "Log in", onclick: () => openRolePicker("login") })),
+      h("ul", { className: "landing-points" }, ["Pay in a tap", "Only live options", "Back on the road fast"].map((t) => h("li", { className: "landing-point", textContent: t })))),
     scene);
 }
 
@@ -609,7 +610,7 @@ function openAuth(role) {
   const f = (id, t, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: t }), el);
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
+      e.preventDefault(); S.user = await api.signIn(email.value, pass.value, role); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
     h("h2", { className: "text-xl font-semibold", textContent: role === "HUB" ? "Hub login" : role === "DRIVER" ? "Driver login" : "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),

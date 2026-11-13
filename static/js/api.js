@@ -18,7 +18,7 @@ async function call(path, { method = "GET", body, form, fd } = {}) {
 }
 export const api = {
   me: () => call("/auth/me"),
-  async signIn(email, password) { await call("/auth/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
+  async signIn(email, password, role) { await call("/auth/login", { method: "POST", form: { username: email, password, ...(role ? { expected_role: role } : {}) } }); return call("/auth/me"); },
   async register(name, email, password, role, hub_type) { await call("/auth/register", { method: "POST", body: { name, email, password, role, hub_type } }); return this.signIn(email, password); },
   async staffSignIn(email, password) { await call("/auth/staff/login", { method: "POST", form: { username: email, password } }); return call("/auth/me"); },
   liveStatus: () => call("/hub/live"),
