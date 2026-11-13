@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { $, h, icon, refreshIcons, money, fmtRange, utc, toast, setTheme, isDark, confirmDialog, pill, chip, progress, countdown, startTicker, busy } from "./ui.js";
 
+const usageLimit = (key, fallback) => (S.limits && S.limits[key] !== undefined ? S.limits[key] : fallback);
 const S = { orders: { pending: [], upcoming: [], past: [] }, near: null, radius: "10", live: null, vs: null, user: null, view: "find", chargers: [], bookings: [], mine: [], loading: true, f: { connector: "", power: "", price: "" }, on: null, target: null };
 const CONNECTORS = ["TYPE2", "CCS2", "CHADEMO", "BHARAT_AC001", "BHARAT_DC001", "GBT"];
 const where = () => new Promise((ok, no) => navigator.geolocation
@@ -55,7 +56,7 @@ function renderChrome() {
   const themeBtn = h("button", { className: "ibtn", dataset: { tip: isDark() ? "Switch to light mode" : "Switch to dark mode" }, "aria-label": isDark() ? "Switch to light mode" : "Switch to dark mode", onclick: () => { setTheme(!isDark()); renderChrome(); } }, icon(isDark() ? "sun" : "moon", "size-5"));
   user.replaceChildren(...(S.user ? [themeBtn, h("span", { className: "text-sm text-mute hidden sm:inline mr-1", textContent: `${S.user.name} · ${roleLabel(S.user)}` }),
       h("button", { className: "btn", textContent: "Sign out", onclick: async () => { await api.signOut(); S.user = null; S.bookings = []; S.mine = []; S.orders = { pending: [], upcoming: [], past: [] }; S.view = "find"; renderChrome(); await syncLive(); go("find"); toast("Signed out"); } })]
-    : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => go("register") })]));
+    : [themeBtn, h("button", { className: "btn", textContent: "Login", onclick: () => openRolePicker("login") }), h("button", { className: "btn btn-primary", textContent: "Register", onclick: () => openRolePicker("register") })]));
   refreshIcons();
 }
 async function go(view) {  // eslint-disable-line
@@ -67,7 +68,7 @@ async function go(view) {  // eslint-disable-line
   S.view = view; renderChrome(); render();
   if (view === "verify") await guard(loadVerify)();
   if (view === "bookings") await guard(loadBookings)();
-  if (view === "chargers") await guard(loadMine)();
+  if (view === "chargers" || view === "share") await guard(loadMine)();
   if (view === "orders") await guard(loadOrders)();
   if (view === "dashboard") await guard(loadDashboard)();
   if (view === "find") await guard(loadChargers)();  // always show fresh availability
@@ -85,12 +86,12 @@ function filterBar() {
   const sel = h("select", { id: "f-conn", onchange: (e) => { S.f.connector = e.target.value; reload(); } }, h("option", { value: "", textContent: "Any" }), CONNECTORS.map((c) => h("option", { value: c, textContent: c.replace("_", " "), selected: S.f.connector === c })));
   const num = (id, key, min) => h("input", { id, type: "number", min, step: "any", value: S.f[key], placeholder: "No limit", onchange: (e) => { S.f[key] = e.target.value; reload(); } });
   const lab = (id, text, el) => h("div", { className: "field" }, h("label", { htmlFor: id, textContent: text }), el);
-  const radius = h("select", { id: "f-radius", onchange: (e) => { S.radius = e.target.value; reload(); } }, ["2", "5", "10", "25", "50"].map((r) => h("option", { value: r, textContent: `${r} km`, selected: S.radius === r })));
+  const radius = h("select", { id: "f-radius", onchange: (e) => { S.radius = e.target.value; reload(); } }, ["25", "50", "100", "150", "200"].map((r) => h("option", { value: r, textContent: `${r} km`, selected: S.radius === r })));
   const nearRow = h("div", { className: "flex flex-wrap items-end gap-3" },
     h("button", { id: "btn-near", className: "btn " + (S.near ? "" : "btn-primary"), onclick: guard(async () => { const p = await where(); S.near = { lat: p.latitude, lon: p.longitude }; await loadChargers(); }) }, icon("locate-fixed", "size-4"), S.near ? "Update my location" : "Chargers near me"),
-    S.near ? lab("f-radius", "Within", radius) : null,
+    S.near ? lab("f-radius", "My car's driving range", radius) : null,
     S.near ? h("button", { className: "btn", textContent: "Show all live chargers", onclick: () => { S.near = null; reload(); } }) : null,
-    h("p", { className: "text-sm text-mute" }, S.near ? `Live chargers within ${S.radius} km of you, nearest first.` : "Showing every charger that is live right now."));
+    h("p", { className: "text-sm text-mute" }, S.near ? `Live chargers within ${S.radius} km of you (your car's range), nearest first.` : "Showing every charger that is live right now."));
   return h("div", { className: "panel p-4 grid gap-4" }, nearRow, h("div", { className: "grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] items-end" },
     lab("f-conn", "Connector", sel), lab("f-power", "Minimum power (kW)", num("f-power", "power", 1)), lab("f-price", "Maximum price (₹/kWh)", num("f-price", "price", 0)),
     h("button", { className: "btn", textContent: "Clear all filters", disabled: !filtered(), onclick: () => { S.f = { connector: "", power: "", price: "" }; reload(); } })));
@@ -104,7 +105,7 @@ function chargerRow(c) {
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      canReserve() ? (c.is_live ? h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking") : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
+      canReserve() ? (c.is_live ? (activeBooking() && usageLimit("max_active_bookings", 1) > 0 ? h("button", { className: "btn", disabled: true, textContent: "One booking at a time" }) : h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking")) : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
 }
 function hl(id) {
   S.on = id;
@@ -155,17 +156,16 @@ function emptyFind() {
 }
 /* visitors: a short welcome that explains the product in three steps */
 function welcomePanel() {
-  return h("section", { className: "panel hero p-6 md:p-8 grid gap-6", "aria-labelledby": "welcome-title" },
-    h("div", { className: "grid gap-2 max-w-2xl" },
-      h("p", { className: "text-sm text-accent font-medium", textContent: "Charge your EV at a home or shop near you" }),
-      h("h2", { id: "welcome-title", className: "text-2xl md:text-3xl font-semibold tracking-tight", textContent: "Book a live charger in three steps" }),
-      h("p", { className: "text-mute", textContent: "Hosts share chargers at their home or shop. You only see chargers that are live right now, so what you book is ready." })),
-    h("ol", { className: "grid gap-4 md:grid-cols-3" }, [["Find", "Pick a live charger on the map, or near you."], ["Request", "Choose a time. The host accepts or declines."], ["Pay and charge", "Pay once accepted, follow the directions, and charge."]]
-      .map(([t, d], i) => h("li", { className: "step-card" }, h("span", { className: "step-num", textContent: String(i + 1) }), h("h3", { className: "font-medium", textContent: t }), h("p", { className: "text-sm text-mute", textContent: d })))),
+  return h("section", { className: "panel hero p-6 md:p-10 grid gap-8", "aria-labelledby": "welcome-title" },
+    h("div", { className: "grid gap-3 max-w-2xl" },
+      h("p", { className: "dash-kicker", textContent: "EV charging, near you" }),
+      h("h2", { id: "welcome-title", className: "text-3xl md:text-4xl font-semibold tracking-tight", textContent: "Charge at a live charger near you, or earn from your own." }),
+      h("p", { className: "text-mute text-base md:text-lg", textContent: "Hosts share chargers at home or in their shop. You only see chargers that are live right now, so what you book is ready when you arrive." })),
     h("div", { className: "flex flex-wrap gap-3" },
-      h("button", { className: "btn btn-primary", textContent: "Create an account", onclick: () => go("register") }),
-      h("button", { className: "btn", textContent: "Login", onclick: () => openAuth() }),
-      h("button", { className: "btn border-transparent text-mute", textContent: "Share a charger instead", onclick: () => { S.reg = { name: "", email: "", pass: "", role: "HUB", hub: "HOUSE" }; go("register"); } })));
+      h("button", { className: "btn btn-primary", textContent: "Get started", onclick: () => openRolePicker("register") }),
+      h("button", { className: "btn", textContent: "Login", onclick: () => openRolePicker("login") })),
+    h("ol", { className: "grid gap-4 md:grid-cols-3" }, [["Enter your car's range", "Tell us how far your car can go, and where you are."], ["Request a live hub", "The host has 3 minutes to accept. Their answer arrives as a live update."], ["Charge and pay", "The host confirms your arrival and the charging time. You pay, then charge."]]
+      .map(([t, d], i) => h("li", { className: "step-card" }, h("span", { className: "step-num", textContent: String(i + 1) }), h("h3", { className: "font-medium", textContent: t }), h("p", { className: "text-sm text-mute", textContent: d })))));
 }
 function findView() {
   const list = S.loading ? skeleton() : S.chargers.length ? h("ul", { className: "panel overflow-hidden" }, S.chargers.map(chargerRow)) : emptyFind();
@@ -342,9 +342,10 @@ function ordersView() {
   const stat = (label, n, ic) => h("div", { className: "panel stat" }, h("p", { className: "text-sm text-mute flex items-center gap-2" }, icon(ic, "size-4"), label), h("p", { className: "stat-num", textContent: String(n) }));
   const summary = h("div", { className: "stat-grid" }, stat("New requests", pending.length, "inbox"), stat("Accepted", upcoming.length, "calendar-check"),
     stat("Charging now", running.length, "zap"), stat("Completed", past.filter((o) => o.status === "COMPLETED").length, "check-circle-2"));
-  return h("div", { className: "grid gap-6" }, head, offline, summary,
+  const hubBusy = usageLimit("max_active_hub_bookings", 1) > 0 && S.orders.upcoming.length >= usageLimit("max_active_hub_bookings", 1);
+  return h("div", { className: "grid gap-6" }, head, offline, summary, hubBusy ? h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("info", "size-5 shrink-0 text-accent"), "You have an accepted booking in progress or coming up. You can accept the next request once it has finished or been cancelled.") : null,
     block("New requests", pending, "No requests waiting.", (o) => card(o, h("p", { className: "text-sm text-accent flex items-center gap-1" }, icon("clock", "size-4"), h("span", {}, "Please answer within ", o.hold_expires_at ? countdown(o.hold_expires_at) : "a few minutes", ".")), [
-      h("button", { className: "btn btn-primary", textContent: "Accept", onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
+      h("button", { className: "btn btn-primary", textContent: "Accept", disabled: hubBusy, onclick: act("Accepting…", async () => { await api.acceptOrder(o.id); toast(o.estimated_cost > 0 ? "Accepted. The driver has been asked to pay." : "Accepted. The driver can come."); await loadOrders(); }) }),
       h("button", { className: "btn btn-danger", textContent: "Decline", onclick: () => askDecline(o) })])),
     running.length ? block("In progress", running, "", (o) => card(o, h("div", { className: "grid gap-2" }, h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("zap", "size-4"), `Charging until ${tm(o.end_time)}.`), progress(o.start_time, o.end_time)),
       h("button", { className: "btn", textContent: "Mark session done", onclick: guard(async () => {
@@ -399,6 +400,8 @@ function shareView() {
   const hours = h("div", { className: "grid gap-4 sm:grid-cols-3", hidden: true }, f("s-from", "Open from", from), f("s-to", "Open until", to), f("s-tz", "Timezone", tz, "If 'from' is later than 'until', the window runs overnight."));
   const locate = h("button", { className: "btn", type: "button", textContent: "Use my location", onclick: guard(async () => { const p = await new Promise((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(ok, () => no(new Error("We couldn't read your location. Allow location access or enter coordinates."))) : no(new Error("This browser can't share your location. Enter coordinates instead."))); lat.value = p.coords.latitude.toFixed(6); lon.value = p.coords.longitude.toFixed(6); }) });
   const submit = h("button", { className: "btn btn-primary", type: "submit", textContent: "List charger" });
+  const atLimit = usageLimit("max_chargers_per_hub", 1) > 0 && S.mine.length >= usageLimit("max_chargers_per_hub", 1);
+  if (atLimit) submit.disabled = true;
   const mapBox = h("div", { className: "panel overflow-hidden isolate h-64", hidden: !window.L, role: "region", "aria-label": "Map. Click to place your charger." });
   let map, mk;
   const setPt = (pan) => {
@@ -414,6 +417,7 @@ function shareView() {
     map.on("click", (e) => { lat.value = e.latlng.lat.toFixed(6); lon.value = e.latlng.lng.toFixed(6); setPt(false); });
   });
   return h("div", { className: "grid gap-6 max-w-2xl" }, h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Share a charger" }), h("p", { className: "text-mute mt-1", textContent: "Add the details drivers need to find and reserve your charger." })),
+    atLimit ? h("div", { className: "panel p-4 text-sm", role: "note" }, "Your hub account already lists a charger. A hub account lists one charger. To add another location, register a second hub account.") : null,
     h("form", { className: "panel p-6 grid gap-4", onsubmit: guard(async (e) => {
       e.preventDefault(); submit.disabled = true;
       const body = { title: title.value, address: addr.value, latitude: +lat.value, longitude: +lon.value, connector_type: conn.value, power_kw: +kw.value, price_per_kwh: +price.value };
@@ -450,13 +454,14 @@ function registerView() {
   const text = (id, key, o = {}) => h("input", { id, value: R[key], required: true, oninput: (e) => (R[key] = e.target.value), ...o });
   const sel = (id, opts, key) => h("select", { id, onchange: (e) => { R[key] = e.target.value; render(); } }, opts.map(([v, t]) => h("option", { value: v, textContent: t, selected: v === R[key] })));
   const need = NEEDS[R.role === "DRIVER" ? "DRIVER" : R.hub];
+  const hubRule = R.role === "HUB" && usageLimit("max_chargers_per_hub", 1) === 1 ? h("p", { className: "text-sm text-mute", textContent: "One hub account lists one charger, and takes one accepted booking at a time." }) : null;
   return h("div", { className: "grid gap-6 max-w-xl" },
     h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Register" }),
       h("p", { className: "text-mute mt-1", textContent: "Everyone is verified before they can book or list a charger. You'll upload your documents right after this step." })),
     stepper(1), noticeBox(),
     h("section", { className: "panel p-5 grid gap-3" }, h("h2", { className: "font-semibold", textContent: "I want to" }), f("r-role", "Account type", sel("r-role", [["DRIVER", "Charge my EV (driver)"], ["HUB", "Share a charger (hub)"]], "role")),
       R.role === "HUB" ? f("r-hub", "My property is a", sel("r-hub", [["HOUSE", "House"], ["SHOP", "Shop or business"]], "hub")) : null,
-      h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
+      hubRule, h("p", { className: "text-sm text-mute", textContent: "You will need:" }), h("ul", { className: "text-sm grid gap-1 list-disc pl-5" }, need.map((n) => h("li", { textContent: n })))),
     h("form", { className: "panel p-5 grid gap-4", onsubmit: guard(async (e) => {
         e.preventDefault(); S.user = await api.register(R.name, R.email, R.pass, R.role, R.role === "HUB" ? R.hub : undefined); S.reg = null;
         renderChrome(); toast("Registered. Next, confirm your email."); await go("verify"); }) },
@@ -511,6 +516,7 @@ const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOSt
 function openDrawer(c) {
   if (!S.user) return openAuth();
   if (S.user.role !== "DRIVER") return toast("Only driver accounts can reserve chargers.", true);
+  if (activeBooking() && usageLimit("max_active_bookings", 1) > 0) return toast("You already have an open booking. Finish or cancel it before booking another.", true);
   if (S.user.verification_status !== "APPROVED") { toast("Verify your account to reserve chargers.", true); return go("verify"); }
   if (!c.is_live) return toast("This hub is offline right now. Try again when it's live.", true);
   const opener = document.activeElement, d = $("#drawer"), s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 2);
@@ -534,8 +540,28 @@ function openDrawer(c) {
   refreshIcons(); d.dataset.open = "true"; $("#scrim").dataset.open = "true"; $("#scrim").onclick = close; document.addEventListener("keydown", key); setTimeout(() => start.focus(), 50);
 }
 
+/* ---------- choose Driver or Hub first, then register or log in for that role ---------- */
+function openRolePicker(mode) {
+  const d = $("#dlg"), opener = document.activeElement;
+  d.onclose = () => opener && opener.focus && opener.focus();
+  const card = (role, title, text, ic) => h("button", { type: "button", className: "role-card", "aria-label": `${title}: ${text}`, onclick: () => {
+      d.close();
+      if (mode === "register") { S.reg = { name: "", email: "", pass: "", role, hub: "HOUSE" }; go("register"); }
+      else openAuth(role); } },
+    h("span", { className: "role-icon" }, icon(ic, "size-6")),
+    h("span", { className: "grid gap-1 text-left" }, h("span", { className: "font-semibold text-lg", textContent: title }), h("span", { className: "text-sm text-mute", textContent: text })),
+    h("span", { className: "role-arrow" }, icon("arrow-right", "size-5")));
+  d.replaceChildren(h("div", { className: "grid gap-5" },
+    h("div", { className: "grid gap-1" }, h("p", { className: "dash-kicker", textContent: mode === "register" ? "Create an account" : "Welcome back" }),
+      h("h2", { className: "text-2xl font-semibold tracking-tight", textContent: "Are you here to charge or to host?" })),
+    card("DRIVER", "I drive an EV", "Find a live charger near you and book it", "car"),
+    card("HUB", "I have a charger", "Host a charger at your home or shop and earn", "plug-zap"),
+    h("div", { className: "flex justify-end" }, h("button", { className: "btn border-transparent text-mute", textContent: "Cancel", onclick: () => d.close() }))));
+  d.showModal();
+}
+
 /* ---------- login (drivers and hubs) ---------- */
-function openAuth() {
+function openAuth(role) {
   const d = $("#dlg"), opener = document.activeElement;
   const email = h("input", { id: "a-email", type: "email", required: true, autocomplete: "email", placeholder: "name@example.com" }), pass = h("input", { id: "a-pass", type: "password", required: true, autocomplete: "current-password", className: "flex-1" });
   const showPass = h("button", { type: "button", className: "btn sm", textContent: "Show", "aria-label": "Show password", onclick: (e) => { const shown = pass.type === "text"; pass.type = shown ? "password" : "text"; e.currentTarget.textContent = shown ? "Show" : "Hide"; } });
@@ -545,7 +571,7 @@ function openAuth() {
       e.preventDefault(); S.user = await api.signIn(email.value, pass.value); d.close(); toast(`Welcome back, ${S.user.name}`); renderChrome(); await syncLive();
       if (S.user.verification_status !== "APPROVED") return go("verify");
       go(["verify", "register"].includes(S.view) ? "find" : S.view); }) },
-    h("h2", { className: "text-xl font-semibold", textContent: "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
+    h("h2", { className: "text-xl font-semibold", textContent: role === "HUB" ? "Hub login" : role === "DRIVER" ? "Driver login" : "Login" }), f("a-email", "Email", email), f("a-pass", "Password", h("div", { className: "flex gap-2 items-center" }, pass, showPass)),
     h("button", { className: "btn btn-primary", type: "submit", textContent: "Login" }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "Forgot password?", onclick: () => { d.close(); openForgot(email.value); } }),
     h("button", { className: "btn border-transparent text-mute", type: "button", textContent: "New here? Register", onclick: () => { d.close(); go("register"); } }),
@@ -582,6 +608,7 @@ function render() { const m = $("#main"); m.classList.remove("view-enter"); void
 startTicker(() => setTimeout(() => { if (S.view === "bookings") guard(loadBookings)(); else if (S.view === "orders") guard(loadOrders)(); else if (S.view === "find") guard(loadChargers)(); }, 1200));
 (async function init() {
   try { const me = await api.me(); S.user = me.is_admin ? null : me; } catch { /* not signed in */ }
+  S.limits = await api.limits().catch(() => null);
   renderChrome(); await syncLive();
   if (S.user && S.user.role === "HUB") await go("find"); else await guard(loadChargers)();
 })();

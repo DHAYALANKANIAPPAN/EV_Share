@@ -30,6 +30,7 @@ export const api = {
   resetPassword: (email, code, new_password) => call("/auth/password/reset", { method: "POST", body: { email, code, new_password } }),
   hubOrders: (scope) => call(`/hub/orders?scope=${scope}`),
   hubDashboard: () => call("/hub/dashboard"),
+  limits: () => call("/limits"),
   acceptOrder: (id) => call(`/hub/orders/${id}/accept`, { method: "POST" }),
   declineOrder: (id, reason) => call(`/hub/orders/${id}/decline`, { method: "POST", body: { reason: reason || null } }),
   verification: () => call("/verification/status"),

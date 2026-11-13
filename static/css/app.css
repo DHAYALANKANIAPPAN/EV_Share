@@ -170,3 +170,13 @@ dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
 }
 @keyframes dash-rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes dash-grow { from { transform: scaleY(0); } }
+
+/* 13 ── landing page and choose-your-role cards ─────────────────────────────── */
+.hero { position: relative; overflow: hidden; background: radial-gradient(60% 80% at 100% 0%, rgb(var(--accent) / .18), transparent 60%), radial-gradient(40% 60% at 0% 100%, rgb(var(--accent) / .08), transparent 60%), rgb(var(--panel)); }
+.role-card { display: flex; align-items: center; gap: 16px; width: 100%; padding: 18px; border: 1px solid rgb(var(--line)); border-radius: var(--radius); background: rgb(var(--panel)); text-align: left; cursor: pointer; transition: border-color .2s ease-out, background-color .2s ease-out, transform .15s ease-out; }
+.role-card:hover { border-color: rgb(var(--accent)); background: rgb(var(--accent) / .06); }
+.role-card:active { transform: scale(.98); }
+.role-card:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
+.role-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: rgb(var(--accent) / .12); color: rgb(var(--accent)); flex: none; }
+.role-arrow { margin-left: auto; color: rgb(var(--mute)); transition: transform .2s ease-out, color .2s ease-out; }
+.role-card:hover .role-arrow { transform: translateX(3px); color: rgb(var(--accent)); }
