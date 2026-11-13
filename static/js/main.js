@@ -278,19 +278,39 @@ async function loadDashboard() {
 }
 const stat = (label, value, ic) => h("div", { className: "panel stat" }, h("p", { className: "text-sm text-mute flex items-center gap-2" }, icon(ic, "size-4"), label), h("p", { className: "stat-num", textContent: value }));
 function dashboardView() {
-  const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Dashboard" }),
-    h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Your sessions, earnings and ratings. Earnings are gross estimates before any commission. Payouts are not paid out yet." }));
+  const head = h("div", { className: "flex flex-wrap items-end justify-between gap-4" },
+    h("div", { className: "grid gap-1" }, h("p", { className: "dash-kicker", textContent: "Hub overview" }),
+      h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Dashboard" }),
+      h("p", { className: "text-mute text-sm max-w-[60ch]", textContent: "Earnings are gross estimates before any commission. Payouts are not paid out yet." })),
+    h("span", { className: "chip mono", textContent: "Last 30 days" }));
   if (S.loading || !S.dash) return h("div", { className: "grid gap-6" }, head, skeleton());
   const d = S.dash;
-  const rating = d.avg_rating == null ? "No reviews yet" : `${d.avg_rating.toFixed(1)} ★ (${d.review_count})`;
-  const cards = h("div", { className: "stat-grid" }, stat("Sessions, all time", String(d.sessions_total), "check-circle-2"), stat("Sessions, last 30 days", String(d.sessions_30d), "calendar"),
-    stat("Earnings, all time", money(d.earnings_total), "wallet"), stat("Earnings, last 30 days", money(d.earnings_30d), "banknote"), stat("Average rating", rating, "star"));
+  const metric = (label, value, tone, i) => h("div", { className: "dash-metric", style: `--i:${i}` },
+    h("p", { className: "dash-label", textContent: label }), h("p", { className: "dash-value mono " + tone, textContent: value }));
+  const strip = h("div", { className: "dash-strip" },
+    metric("Earnings, 30 days", money(d.earnings_30d), "text-accent", 0),
+    metric("Sessions, 30 days", String(d.sessions_30d), "", 1),
+    metric("Earnings, all time", money(d.earnings_total), "", 2),
+    metric("Average rating", d.avg_rating == null ? "—" : `${d.avg_rating.toFixed(1)} / 5`, "", 3));
+  const peak = Math.max(1, ...d.daily.map((x) => x.earnings));
+  const bars = h("div", { className: "dash-bars", role: "img", "aria-label": "Earnings for the last 14 days" }, d.daily.map((x, i) =>
+    h("div", { className: "dash-bar-col", style: `--i:${i}`, title: `${x.day}: ${money(x.earnings)}, ${x.sessions} session(s)` },
+      h("div", { className: "dash-bar", style: `height:${x.earnings > 0 ? Math.max(6, (x.earnings / peak) * 100) : 2}%` }),
+      h("span", { className: "dash-day mono", textContent: x.day.slice(8) }))));
   const rows = d.chargers.length
-    ? h("ul", { className: "panel overflow-hidden" }, d.chargers.map((c) => h("li", { className: "row" },
-        h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium", textContent: c.title }), h("p", { className: "text-sm text-mute", textContent: `${c.sessions} session(s), ${money(c.earnings)} earned` })),
-        h("p", { className: "text-sm self-center", textContent: c.avg_rating == null ? "No reviews yet" : `${c.avg_rating.toFixed(1)} ★ (${c.review_count})` }))))
-    : h("p", { className: "panel p-4 text-sm text-mute", textContent: "List a charger to see its numbers here." });
-  return h("div", { className: "grid gap-6" }, head, cards, h("h2", { className: "font-semibold", textContent: "By charger" }), rows);
+    ? h("ul", { className: "dash-table" }, d.chargers.map((c, i) => {
+        const share = d.earnings_total > 0 ? (c.earnings / d.earnings_total) * 100 : 0;
+        return h("li", { className: "dash-row", style: `--i:${i}` },
+          h("div", { className: "min-w-0" }, h("p", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-xs text-mute mono", textContent: `${c.sessions} session(s)` })),
+          h("div", { className: "dash-share" }, h("div", { className: "progress" }, h("span", { style: `width:${share.toFixed(1)}%` })), h("span", { className: "mono text-xs text-mute", textContent: `${share.toFixed(0)}%` })),
+          h("p", { className: "mono text-right", textContent: money(c.earnings) }),
+          h("span", { className: "chip mono justify-self-end", textContent: c.avg_rating == null ? "No reviews" : `★ ${c.avg_rating.toFixed(1)} (${c.review_count})` }));
+      }))
+    : h("div", { className: "panel p-6 text-sm text-mute", textContent: "List a charger to see its numbers here." });
+  return h("div", { className: "grid gap-8" }, head, strip,
+    h("section", { className: "grid gap-3" }, h("div", { className: "flex items-center justify-between" }, h("h2", { className: "font-semibold", textContent: "Earnings, last 14 days" }),
+      h("span", { className: "text-xs text-mute mono", textContent: `${d.sessions_30d} sessions in 30 days` })), bars),
+    h("section", { className: "grid gap-3" }, h("h2", { className: "font-semibold", textContent: "By charger" }), rows));
 }
 async function loadOrders() {
   S.loading = true; render();

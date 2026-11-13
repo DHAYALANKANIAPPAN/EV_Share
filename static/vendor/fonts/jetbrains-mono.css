@@ -1,0 +1,4 @@
+/* JetBrains Mono (SIL Open Font License). Vendored from @fontsource/jetbrains-mono 5. Used for figures. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/vendor/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/static/vendor/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/vendor/fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }

@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..database import SessionLocal
 from ..models import Payment, PaymentStatus, Review
-from ..schemas import ChargerStatOut, DashboardOut
+from ..schemas import ChargerStatOut, DailyOut, DashboardOut
 from datetime import timedelta
 from typing import Literal
 
@@ -183,10 +183,16 @@ def dashboard(db: DB, user: ApprovedHub):
     total_reviews = sum(n for _, n in ratings.values())
     overall = round(sum(avg * n for avg, n in ratings.values()) / total_reviews, 2) if total_reviews else None
     recent = [b for b in done if b.end_time >= since]
+    today = utcnow().date()
+    daily = []
+    for offset in range(13, -1, -1):
+        day = today - timedelta(days=offset)
+        rows = [b for b in done if b.end_time.date() == day]
+        daily.append(DailyOut(day=day.isoformat(), sessions=len(rows), earnings=round(sum(earned(b) for b in rows), 2)))
     return DashboardOut(
         sessions_total=len(done), sessions_30d=len(recent),
         earnings_total=round(sum(earned(b) for b in done), 2), earnings_30d=round(sum(earned(b) for b in recent), 2),
-        avg_rating=overall, review_count=total_reviews,
+        avg_rating=overall, review_count=total_reviews, daily=daily,
         chargers=[ChargerStatOut(charger_id=c.id, title=c.title, sessions=per[c.id]["sessions"],
                                  earnings=round(per[c.id]["earnings"], 2), avg_rating=ratings.get(c.id, (None, 0))[0],
                                  review_count=ratings.get(c.id, (None, 0))[1]) for c in chargers],
