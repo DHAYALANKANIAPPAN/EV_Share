@@ -3,22 +3,26 @@
 
 /* 1 ── design tokens (space-separated RGB so Tailwind can add opacity) ─────────────── */
 :root {
-  --canvas: 250 250 250; --panel: 255 255 255; --line: 228 228 231;
-  --ink: 24 24 27;       --mute: 100 100 110;
-  --accent: 4 120 87;    --onaccent: 255 255 255;
-  --danger: 185 28 28;   --warn: 180 83 9;
-  --radius: 12px; --radius-sm: 8px;
+  /* light: warm ivory with deep sage ink and vermilion actions */
+  --canvas: 246 241 231; --panel: 251 248 241; --line: 221 213 196;
+  --ink: 46 59 49;       --mute: 102 117 105;
+  --accent: 224 69 47;   --onaccent: 255 250 243;
+  --danger: 180 35 24;   --warn: 178 110 20;
+  --radius: 16px; --radius-sm: 10px;
   --ease: cubic-bezier(.16, 1, .3, 1);
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
 }
 .dark {
-  --canvas: 9 9 11;      --panel: 20 20 23;   --line: 42 42 48;
-  --ink: 244 244 245;    --mute: 161 161 170;
-  --accent: 52 211 153;  --onaccent: 4 30 20;
+  /* dark: deep sage with warm ivory text and a brighter vermilion */
+  --canvas: 34 45 37;    --panel: 43 55 46;   --line: 65 80 69;
+  --ink: 246 241 231;    --mute: 176 189 176;
+  --accent: 232 85 62;   --onaccent: 255 250 243;
   --danger: 248 113 113; --warn: 251 191 36;
 }
 
 /* 2 ── base ───────────────────────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
+h1, h2, .landing-title { font-family: var(--font-display); font-weight: 600; letter-spacing: -.02em; }
 body { font-family: Geist, system-ui, sans-serif; line-height: 1.55; -webkit-font-smoothing: antialiased; }
 :focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
 ::selection { background: rgb(var(--accent) / .25); }
@@ -220,3 +224,10 @@ dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
 .landing-point { padding: 6px 14px; border: 1px solid rgb(var(--line)); border-radius: 999px; background: rgb(var(--panel)); font-size: 13px; color: rgb(var(--mute)); transition: border-color .2s ease-out, color .2s ease-out; }
 .landing-point:hover { border-color: rgb(var(--accent)); color: rgb(var(--ink)); }
 .landing-scene::after { content: ""; position: absolute; inset: auto 0 0 0; height: 30%; pointer-events: none; background: linear-gradient(to top, rgb(var(--panel)), transparent); }
+
+/* 15 ── brand finish: pill buttons, soft borders ─────────────────────────────── */
+.btn { border-radius: 999px; }
+.btn-primary { box-shadow: 0 6px 18px -8px rgb(var(--accent) / .6); }
+.btn-primary:hover { box-shadow: 0 10px 24px -8px rgb(var(--accent) / .75); }
+.landing-scene { background-color: rgb(var(--panel)); }
+.landing-point { border-radius: 999px; }

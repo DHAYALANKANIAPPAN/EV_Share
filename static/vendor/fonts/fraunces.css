@@ -1,0 +1,3 @@
+/* Fraunces (SIL Open Font License). Vendored from @fontsource/fraunces 5 for headings. */
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 400; font-display: swap; src: url("/static/vendor/fonts/fraunces-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 600; font-display: swap; src: url("/static/vendor/fonts/fraunces-latin-600-normal.woff2") format("woff2"); }
