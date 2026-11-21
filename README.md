@@ -44,6 +44,17 @@ Run the tests with `pytest`.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | – | Use Razorpay **test-mode** keys first |
 | `DEFAULT_TIMEZONE` | `Asia/Kolkata` | Default for new chargers |
 
+### Payments: test mode now, live later
+
+Payments run in test mode until the business is verified. The switch is one line in `.env`:
+- `EVSHARE_PAYMENT_PROVIDER=mock` (current): nothing is charged.
+- `EVSHARE_PAYMENT_PROVIDER=razorpay` with test keys: real checkout, no real money.
+- Live keys are only added after Razorpay's business verification.
+
+### Maps
+
+The map uses OpenStreetMap tiles, which are free and show India clearly. Each map shows the required attribution. For a high-traffic launch, move to a paid tile provider or host your own tiles; OpenStreetMap's usage policy limits heavy use.
+
 ### Razorpay
 
 1. Create a Razorpay account and copy your **test-mode** key id and secret from the dashboard.

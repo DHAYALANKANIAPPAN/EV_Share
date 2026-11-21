@@ -543,7 +543,7 @@ function openDrawer(c) {
 /* ---------- landing page for visitors: a short headline and an animated scene ---------- */
 const LANDING_SCENE = `
 <svg viewBox="0 0 640 400" role="img" aria-label="An electric car drives along a road while a plug charges a battery" class="landing-svg">
-  <defs><radialGradient id="landing-glow" cx="50%" cy="38%" r="55%"><stop offset="0" stop-color="rgb(232 85 62 / .24)"/><stop offset="1" stop-color="rgb(232 85 62 / 0)"/></radialGradient></defs>
+  <defs><radialGradient id="landing-glow" cx="50%" cy="38%" r="55%"><stop offset="0" stop-color="rgb(201 75 51 / .24)"/><stop offset="1" stop-color="rgb(201 75 51 / 0)"/></radialGradient></defs>
   <rect width="640" height="400" fill="url(#landing-glow)"/>
   <g>
     <rect x="236" y="112" width="168" height="92" rx="16" class="batt-shell"/>

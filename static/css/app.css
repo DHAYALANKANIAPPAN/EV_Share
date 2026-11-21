@@ -6,7 +6,7 @@
   /* light: warm ivory with deep sage ink and vermilion actions */
   --canvas: 246 241 231; --panel: 251 248 241; --line: 221 213 196;
   --ink: 46 59 49;       --mute: 102 117 105;
-  --accent: 224 69 47;   --onaccent: 255 250 243;
+  --accent: 186 56 36;   --onaccent: 255 250 243;
   --danger: 180 35 24;   --warn: 178 110 20;
   --radius: 16px; --radius-sm: 10px;
   --ease: cubic-bezier(.16, 1, .3, 1);
@@ -14,9 +14,9 @@
 }
 .dark {
   /* dark: deep sage with warm ivory text and a brighter vermilion */
-  --canvas: 34 45 37;    --panel: 43 55 46;   --line: 65 80 69;
-  --ink: 246 241 231;    --mute: 176 189 176;
-  --accent: 232 85 62;   --onaccent: 255 250 243;
+  --canvas: 26 36 29;    --panel: 35 47 38;   --line: 54 70 58;
+  --ink: 246 241 231;    --mute: 168 182 168;
+  --accent: 201 75 51;   --onaccent: 255 250 243;
   --danger: 248 113 113; --warn: 251 191 36;
 }
 

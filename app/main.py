@@ -21,7 +21,7 @@ CSP = "; ".join([
     "script-src 'self' https://checkout.razorpay.com",  # Razorpay's checkout script; nothing else from outside
     "style-src 'self' 'unsafe-inline'",                  # Leaflet and the page's helpers set inline styles
     "font-src 'self'",
-    "img-src 'self' data: https://*.tile.openstreetmap.org",  # OpenStreetMap map tiles
+    "img-src 'self' data: https://tile.openstreetmap.org https://*.tile.openstreetmap.org",  # OpenStreetMap map tiles
     "connect-src 'self' https://lumberjack.razorpay.com https://api.razorpay.com",
     "frame-src https://checkout.razorpay.com https://api.razorpay.com",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
