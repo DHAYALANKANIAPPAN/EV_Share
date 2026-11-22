@@ -306,7 +306,7 @@ function rideRow(b) {
         await api.finish(b.id); toast("Session ended. Thanks for charging!"); await loadBookings(); }) }));
   } else if (st === "COMPLETED") {
     [title, tone] = ["Completed", ""];
-    body = h("p", { className: "text-sm text-mute", textContent: "Thank you for charging. Details are in the timeline below." });
+    body = h("p", { className: "text-sm text-mute", textContent: `Paid ₹${b.estimated_cost}: ₹${(b.estimated_cost * 0.8).toFixed(0)} to the host and ₹${(b.estimated_cost * 0.2).toFixed(0)} platform fee. Thank you for charging.` });
   } else {
     [title, tone] = [st === "CANCELLED" ? "Cancelled" : "Declined", "danger"];
     body = h("p", { className: "text-sm text-danger", textContent: b.decline_reason || "This ride ended without a charge." });

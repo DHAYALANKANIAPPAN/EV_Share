@@ -47,3 +47,17 @@ def test_dashboard_shows_pending_and_paid(client):
 def test_only_hosts_see_payouts(client):
     driver = register_and_login(client, "p@example.com", "Pooja")
     assert client.get("/payouts/mine", headers=driver).status_code == 403
+
+
+def test_admin_sees_every_payout_with_the_host_and_the_charger(client):
+    host, driver, bid = _finished_paid_session(client)
+    admin = register_and_login(client, "admin@example.com", "Admin")
+    with client.session_factory() as db:
+        from app.models import User
+        db.query(User).filter_by(email="admin@example.com").one().is_admin = True
+        db.commit()
+    rows = client.get("/payouts/queue", headers=admin).json()
+    assert len(rows) == 1
+    assert rows[0]["hub_name"] == "Asha" and rows[0]["charger_title"] == CHARGER["title"]
+    assert rows[0]["status"] == "PENDING" and rows[0]["amount"] == 59.2
+    assert client.get("/payouts/queue", headers=host).status_code == 403

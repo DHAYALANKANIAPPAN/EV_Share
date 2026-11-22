@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from ..deps import DB, AdminUser, ApprovedHub
-from ..models import Payout, utcnow
+from ..models import Booking, Payout, User, utcnow
 from ..services.payouts import payout_total
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
@@ -28,6 +28,18 @@ class PayoutSummaryOut(BaseModel):
     items: list[PayoutOut]
 
 
+class PayoutRowOut(BaseModel):
+    id: int
+    hub_name: str
+    charger_title: str
+    booking_id: int
+    amount: float
+    status: str
+    reference: str | None
+    created_at: datetime
+    paid_at: datetime | None
+
+
 class MarkPaidIn(BaseModel):
     reference: str = Field(min_length=3, max_length=120)  # the bank transfer reference
 
@@ -38,6 +50,21 @@ def my_payouts(db: DB, user: ApprovedHub):
     rows = db.scalars(select(Payout).where(Payout.hub_user_id == user.id).order_by(Payout.id.desc())).all()
     return PayoutSummaryOut(pending=payout_total(db, user.id, "PENDING"), paid=payout_total(db, user.id, "PAID"),
                             items=[PayoutOut.model_validate(p) for p in rows])
+
+
+@router.get("/queue", response_model=list[PayoutRowOut])
+def payout_queue(db: DB, admin: AdminUser):
+    """Every payout, pending first, for the reviewer portal."""
+    rows = db.scalars(select(Payout).order_by(Payout.status.desc(), Payout.id.desc()).limit(300)).all()
+    out = []
+    for p in rows:
+        booking = db.get(Booking, p.booking_id)
+        hub = db.get(User, p.hub_user_id)
+        out.append(PayoutRowOut(id=p.id, hub_name=hub.name if hub else "Unknown host",
+                                charger_title=booking.charger.title if booking else "Unknown charger",
+                                booking_id=p.booking_id, amount=p.amount, status=p.status, reference=p.reference,
+                                created_at=p.created_at, paid_at=p.paid_at))
+    return out
 
 
 @router.post("/{payout_id}/mark-paid", response_model=PayoutOut)
