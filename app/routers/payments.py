@@ -1,3 +1,9 @@
+from datetime import timedelta
+
+from ..config import settings
+from ..models import utcnow
+from ..services.events import log
+from ..services.notify import notify
 from fastapi import APIRouter, HTTPException, status
 
 from ..deps import DB, CurrentUser
@@ -30,6 +36,8 @@ def checkout(body: CheckoutRequest, db: DB, user: CurrentUser):
     if payment and payment.status == PaymentStatus.PAID:
         raise HTTPException(status.HTTP_409_CONFLICT, "Booking is already paid")
 
+    if booking.kind == "ride" and (booking.ride_stage != "ARRIVAL_CONFIRMED" or not booking.duration_minutes):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose the charging time after the host confirms your arrival, then pay.")
     provider = get_provider()
     if booking.estimated_cost <= 0:
         payment = payment or Payment(booking_id=booking.id, amount=0, currency=CURRENCY, provider="free")
@@ -65,5 +73,13 @@ def confirm(body: ConfirmRequest, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Payment verification failed")
     payment.provider_payment_id = body.payment_id
     payment.status = PaymentStatus.PAID
+    if booking.kind == "ride":
+        now = utcnow()
+        booking.ride_stage = "CHARGING"
+        booking.start_time = now
+        booking.end_time = now + timedelta(minutes=booking.duration_minutes or settings.ride_slot_minutes)
+        log(db, booking, f"Payment of Rs {payment.amount:.0f} received. Charging has started.")
+        notify(booking.charger.owner.email, "Charging started",
+               f"{booking.driver.name} has paid and started charging at '{booking.charger.title}'.")
     db.commit()
     return booking

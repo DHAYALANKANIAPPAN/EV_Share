@@ -105,7 +105,7 @@ function chargerRow(c) {
     h("div", { className: "grid gap-1 min-w-0" }, h("h3", { className: "font-medium truncate", textContent: c.title }), h("p", { className: "text-sm text-mute truncate", textContent: c.address }), meta,
       h("p", { className: "text-sm flex items-center gap-1 text-mute" }, icon("star", "size-4"), h("span", { textContent: rating }))),
     h("div", { className: "flex gap-2 items-center flex-wrap self-center" }, c.review_count ? h("button", { className: "btn", textContent: "Read reviews", onclick: guard(() => openReviews(c)) }) : null,
-      canReserve() ? (c.is_live ? (activeBooking() && usageLimit("max_active_bookings", 1) > 0 ? h("button", { className: "btn", disabled: true, textContent: "One booking at a time" }) : h("button", { className: "btn btn-primary", onclick: () => openDrawer(c) }, icon("calendar-plus", "size-4"), "Request booking")) : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
+      canReserve() ? (c.is_live ? (activeBooking() && usageLimit("max_active_bookings", 1) > 0 ? h("button", { className: "btn", disabled: true, textContent: "One booking at a time" }) : h("button", { className: "btn btn-primary", onclick: act("Requesting…", () => requestRide(c)) }, icon("zap", "size-4"), "Request this hub")) : h("span", { className: "text-sm text-mute", textContent: "Hub offline" })) : null));
 }
 function hl(id) {
   S.on = id;
@@ -199,13 +199,150 @@ function journey(b) {
     return i < labels.length - 1 ? [item, h("li", { className: "journey-line" + (isDone ? " done" : ""), "aria-hidden": "true" })] : [item];
   }));
 }
+/* ---------- on-demand rides: request a hub, reach it, choose the time, pay ---------- */
+const RIDE_PRICE_RS = 100;   // 30 minutes; the server is the authority on price
+const RIDE_STEPS = ["Requested", "Accepted", "Arrived", "Paid", "Charging"];
+function rideIndex(b) {
+  if (b.status === "COMPLETED") return 5;
+  if (b.status !== "CONFIRMED") return 0;
+  return { EN_ROUTE: 1, ARRIVED: 2, ARRIVAL_CONFIRMED: 3, CHARGING: 4 }[b.ride_stage] ?? 1;
+}
+function rideSteps(b) {
+  const c = rideIndex(b);
+  return h("ol", { className: "journey", "aria-label": "Ride progress" }, RIDE_STEPS.flatMap((label, i) => {
+    const isDone = i < c, isNow = i === c && c < 5;
+    const item = h("li", { className: "journey-step" + (isDone ? " done" : "") + (isNow ? " now" : "") },
+      h("span", { className: "journey-dot", "aria-hidden": "true" }, isDone ? "✓" : String(i + 1)), h("span", { textContent: label }));
+    return i < RIDE_STEPS.length - 1 ? [item, h("li", { className: "journey-line" + (isDone ? " done" : ""), "aria-hidden": "true" })] : [item];
+  }));
+}
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const r = (x) => (x * Math.PI) / 180, dLat = r(lat2 - lat1), dLon = r(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
+function agoText(iso) { const s = Math.max(0, Math.round((Date.now() - utc(iso)) / 1000)); return s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`; }
+function currentSpot() {
+  return new Promise((ok, no) => {
+    if (!navigator.geolocation) return no(new Error("Your browser can't share your location."));
+    navigator.geolocation.getCurrentPosition((p) => ok({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+      () => no(new Error("Allow location access so EV Share can find hubs in your car's range.")), { enableHighAccuracy: true, timeout: 15000 });
+  });
+}
+async function requestRide(c) {
+  const spot = await currentSpot();
+  await api.rideRequest({ charger_id: c.id, latitude: spot.latitude, longitude: spot.longitude, range_km: Number(S.radius) > 0 ? Number(S.radius) : null });
+  toast(`Request sent to ${c.title}. The host has 2 minutes to accept.`);
+  await loadBookings();
+  go("bookings");
+}
+let locWatch = null, locRideId = null, locLast = 0;
+function stopLocationSharing() {
+  if (locWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(locWatch);
+  locWatch = null; locRideId = null;
+}
+function syncLocationSharing() {
+  if (!S.rideTick) S.rideTick = setInterval(() => {
+    if (S.view === "bookings" && S.bookings.some((b) => b.kind === "ride" && (b.status === "REQUESTED" || b.status === "CONFIRMED"))) loadBookings();
+  }, 5000);
+  const live = S.bookings.find((b) => b.kind === "ride" && b.status === "CONFIRMED" && b.ride_stage === "EN_ROUTE");
+  if (!live) return stopLocationSharing();
+  if (locRideId === live.id || !navigator.geolocation) return;
+  stopLocationSharing();
+  locRideId = live.id;
+  locWatch = navigator.geolocation.watchPosition((p) => {
+    S.driverSpot = { lat: p.coords.latitude, lon: p.coords.longitude };   // used by the map on the ride card
+    if (Date.now() - locLast < 10000) return;          // send at most every 10 seconds
+    locLast = Date.now();
+    api.rideLocation(live.id, p.coords.latitude, p.coords.longitude).catch(() => {});
+  }, () => toast("Turn on location for this site so the host can see you're coming.", true), { enableHighAccuracy: true, maximumAge: 5000 });
+}
+function rideMap(b) {
+  const el = h("div", { className: "ride-map", role: "img", "aria-label": "Map of the hub and your position" });
+  setTimeout(() => {
+    if (!window.L || b.pickup_latitude == null) return;
+    const map = window.L.map(el, { zoomControl: false }).setView([b.pickup_latitude, b.pickup_longitude], 15);
+    window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
+    window.L.marker([b.pickup_latitude, b.pickup_longitude]).addTo(map);
+    if (S.driverSpot) {
+      window.L.circleMarker([S.driverSpot.lat, S.driverSpot.lon], { radius: 8 }).addTo(map);
+      map.fitBounds([[b.pickup_latitude, b.pickup_longitude], [S.driverSpot.lat, S.driverSpot.lon]], { padding: [28, 28] });
+    }
+  }, 0);
+  return el;
+}
+function rideTimeline(id) {
+  const list = h("ol", { className: "grid gap-2 text-sm" });
+  const box = h("details", { className: "text-sm" }, h("summary", { className: "cursor-pointer text-mute", textContent: "Timeline" }), list);
+  box.addEventListener("toggle", () => { if (!box.open || list.childElementCount) return;
+    api.ride(id).then((d) => list.replaceChildren(...d.events.map((e) => h("li", { className: "flex gap-3" }, h("span", { className: "mono text-xs text-mute shrink-0", textContent: tm(e.created_at) }), h("span", { textContent: e.message }))))).catch(() => {}); });
+  return box;
+}
+function rideRow(b) {
+  const st = b.status, stage = b.ride_stage;
+  let title = "", tone = "", body = null;
+  if (st === "REQUESTED") {
+    [title, tone] = ["Waiting for the host", "warn"];
+    body = h("p", { className: "text-sm text-mute flex items-center gap-1" }, icon("clock", "size-4"), "The host has ", countdown(b.hold_expires_at), " to accept.");
+  } else if (st === "CONFIRMED" && stage === "EN_ROUTE") {
+    [title, tone] = ["On the way", "ok"];
+    body = h("div", { className: "grid gap-3" }, h("p", { className: "text-sm text-mute", textContent: "Keep location on. The host sees you coming." }), rideMap(b),
+      h("button", { className: "btn btn-primary w-fit", textContent: "I've reached the hub", onclick: act("Checking your position…", async () => {
+        await api.rideArrived(b.id); toast("Marked as arrived. Waiting for the host to confirm."); await loadBookings(); }) }));
+  } else if (st === "CONFIRMED" && stage === "ARRIVED") {
+    [title, tone] = ["Arrived", "ok"];
+    body = h("p", { className: "text-sm text-mute", textContent: "Waiting for the host to confirm your arrival." });
+  } else if (st === "CONFIRMED" && stage === "ARRIVAL_CONFIRMED") {
+    [title, tone] = ["Choose charging time", "warn"];
+    body = h("div", { className: "grid gap-3" }, h("p", { className: "text-sm text-mute", textContent: "The host confirmed your arrival. Choose how long to charge." }),
+      h("button", { className: "btn btn-primary w-fit", textContent: `30 minutes · ₹${RIDE_PRICE_RS}`, onclick: act("Opening payment…", async () => {
+        await api.rideDuration(b.id, 30); await api.pay(b.id); toast("Payment complete. Charging starts now."); await loadBookings(); }) }),
+      h("p", { className: "text-xs text-mute mono", textContent: `₹${RIDE_PRICE_RS * 0.8} to the host · ₹${RIDE_PRICE_RS * 0.2} platform fee` }));
+  } else if (st === "CONFIRMED" && stage === "CHARGING") {
+    [title, tone] = ["Charging", "ok live"];
+    body = h("div", { className: "grid gap-3" }, progress(b.start_time, b.end_time), h("p", { className: "text-sm text-mute", textContent: `Charging until ${tm(b.end_time)}.` }),
+      h("button", { className: "btn w-fit", textContent: "End session", onclick: guard(async () => {
+        if (!(await confirmDialog({ title: `End your session at '${b.charger_title}'?`, body: "Use this when you've finished charging.", confirm: "End session", keep: "Keep charging" }))) return;
+        await api.finish(b.id); toast("Session ended. Thanks for charging!"); await loadBookings(); }) }));
+  } else if (st === "COMPLETED") {
+    [title, tone] = ["Completed", ""];
+    body = h("p", { className: "text-sm text-mute", textContent: "Thank you for charging. Details are in the timeline below." });
+  } else {
+    [title, tone] = [st === "CANCELLED" ? "Cancelled" : "Declined", "danger"];
+    body = h("p", { className: "text-sm text-danger", textContent: b.decline_reason || "This ride ended without a charge." });
+  }
+  const steps = st === "DECLINED" || st === "CANCELLED" ? null : rideSteps(b);
+  return h("li", { className: "row" }, h("div", { className: "grid gap-4 min-w-0" },
+    h("div", { className: "flex items-center gap-2 flex-wrap" }, h("h3", { className: "font-medium", textContent: b.charger_title }), pill(title, tone)),
+    steps, body, rideTimeline(b.id)));
+}
+/* host: what the driver is doing on an accepted ride */
+function hubRideLine(o) {
+  if (o.status === "REQUESTED") return h("p", { className: "text-sm text-mute", textContent: "Ride request: accept within 2 minutes." });
+  if (o.status !== "CONFIRMED") return null;
+  if (o.ride_stage === "EN_ROUTE") {
+    const km = o.driver_lat != null && o.charger_latitude != null ? haversineKm(o.charger_latitude, o.charger_longitude, o.driver_lat, o.driver_lon) : null;
+    const dist = km == null ? "" : km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
+    return h("p", { className: "text-sm flex items-center gap-1 text-accent" }, icon("navigation", "size-4"),
+      `Driver is on the way${dist ? `, ${dist}` : ""}${o.driver_location_at ? ` (location ${agoText(o.driver_location_at)})` : ""}.`);
+  }
+  if (o.ride_stage === "ARRIVED") return h("div", { className: "flex items-center gap-3 flex-wrap" }, h("p", { className: "text-sm text-accent", textContent: "Driver has reached the hub." }),
+    h("button", { className: "btn btn-primary", textContent: "Confirm arrival", onclick: act("Confirming…", async () => {
+      await api.rideConfirmArrival(o.id); toast("Arrival confirmed. The driver can now choose the charging time."); await loadOrders(); }) }));
+  if (o.ride_stage === "ARRIVAL_CONFIRMED") return h("p", { className: "text-sm text-mute", textContent: "Waiting for the driver to choose the charging time and pay." });
+  if (o.ride_stage === "CHARGING") return h("p", { className: "text-sm text-accent", textContent: "Charging now." });
+  return null;
+}
+
 function bookingsView() {
   const head = h("div", {}, h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "My bookings" }), h("p", { className: "text-mute mt-1", textContent: "Your requests and sessions, newest first." }));
   if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
   if (!S.bookings.length) return h("div", { className: "grid gap-6" }, head, h("section", { className: "panel p-8 grid gap-2 justify-items-start" }, icon("calendar-x", "size-6 text-mute"),
     h("h2", { className: "font-semibold text-lg", textContent: "No bookings yet" }), h("p", { className: "text-sm text-mute", textContent: "Find a live charger and send a request to see it here." }), h("button", { className: "btn btn-primary mt-2", textContent: "Find chargers", onclick: () => go("find") })));
   const now = new Date();
+  syncLocationSharing();
   return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.bookings.map((b) => {
+    if (b.kind === "ride") return rideRow(b);
     const st = b.status, upcoming = utc(b.end_time) > now, paid = b.payment_status === "PAID" || b.estimated_cost <= 0;
     let ic = "check-circle-2", cls = "text-accent", line = "Confirmed. You can go to the charger.";
     if (st === "REQUESTED") [ic, cls, line] = ["clock", "text-mute", "Waiting for the hub to accept."];
@@ -330,7 +467,8 @@ function ordersView() {
     h("p", { className: "text-mute mt-1 max-w-[65ch]", textContent: "Drivers send requests while you're live. Accept one and the driver pays, then comes to you." }));
   if (S.loading) return h("div", { className: "grid gap-6" }, head, skeleton());
   const offline = S.live && !S.live.is_live ? h("div", { className: "panel p-4 flex gap-3 text-sm", role: "note" }, icon("radio-tower", "size-5 shrink-0 text-mute"), "You're offline, so drivers can't send new requests. Use Go live at the bottom of the page.") : null;
-  const card = (o, extra, actions) => h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" },
+  const card = (o, extra, actions) => { const el = cardBase(o, extra, actions); if (o.kind === "ride") el.firstChild.append(hubRideLine(o)); return el; };
+  const cardBase = (o, extra, actions) => h("li", { className: "row" }, h("div", { className: "grid gap-1 min-w-0" },
     h("h3", { className: "font-medium", textContent: `${o.driver_name}${o.driver_vehicle ? `, ${o.driver_vehicle}` : ""}` }),
     h("p", { className: "text-sm text-mute", textContent: `${o.charger_title}, ${fmtRange(o.start_time, o.end_time)}, ${money(o.estimated_cost)}` }), extra),
     h("div", { className: "flex gap-2 items-center flex-wrap self-start" }, actions));

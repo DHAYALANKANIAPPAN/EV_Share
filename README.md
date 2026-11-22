@@ -154,7 +154,18 @@ Flow: register, confirm email with a 6-digit code (expires in 10 min, 5 attempts
 
 Hubs only get **Orders, My chargers and Share a charger** (plus the Go live bar); drivers only get **Find chargers and My bookings**.
 
-### Usage rules (one at a time)
+### On-demand rides
+
+A driver picks a live hub within their car's range and asks it to take them now:
+1. **Request.** The hub has 2 minutes to accept. The hub is notified by email and on its Orders page.
+2. **On the way.** The driver's location is shared while travelling, and both sides see the position on a map. A request with no answer is released.
+3. **Reached.** The driver taps "I've reached the hub" only when close to the hub (default within 300 m) with a recent location. The host confirms the arrival.
+4. **Time and pay.** The driver chooses the charging time (30 minutes for ₹100 for now). Payment starts the charging.
+5. **Commission.** For every ₹100 paid, the platform keeps ₹20 and the host receives ₹80. The Dashboard shows the host's share.
+
+Settings: `EVSHARE_RIDE_PRICE_RS`, `EVSHARE_RIDE_SLOT_MINUTES`, `EVSHARE_PLATFORM_COMMISSION_PERCENT`, `EVSHARE_RIDE_RESPONSE_MINUTES`, `EVSHARE_RIDE_ARRIVAL_RADIUS_M`. Payouts to hosts are not automatic yet; they are recorded for Razorpay Route once accounts are verified.
+
+## Usage rules (one at a time)
 
 - **Driver:** one open booking at a time (`EVSHARE_MAX_ACTIVE_BOOKINGS`, default 1). An open booking is one that is requested, accepted, or still running. Cancelling or finishing it frees the driver.
 - **Hub:** one accepted booking at a time (`EVSHARE_MAX_ACTIVE_HUB_BOOKINGS`, default 1). A hub cannot accept a second request until its current booking is finished or cancelled. Requests can still arrive; they wait until the hub is free, or the hub declines them.

@@ -231,3 +231,6 @@ dialog::backdrop { background: rgb(0 0 0 / .4); backdrop-filter: blur(2px); }
 .btn-primary:hover { box-shadow: 0 10px 24px -8px rgb(var(--accent) / .75); }
 .landing-scene { background-color: rgb(var(--panel)); }
 .landing-point { border-radius: 999px; }
+
+/* on-demand rides: the small map on the driver's way to the hub */
+.ride-map { height: 220px; border-radius: 12px; border: 1px solid rgb(var(--line)); overflow: hidden; }
