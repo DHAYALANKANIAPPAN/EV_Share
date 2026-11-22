@@ -145,6 +145,11 @@ class BookingOut(ORM):
     pickup_address: str | None = None      # only after the hub accepted
     pickup_latitude: float | None = None
     pickup_longitude: float | None = None
+    kind: str = "slot"
+    ride_stage: str | None = None
+    duration_minutes: int | None = None
+    hub_amount: float | None = None
+    platform_fee: float | None = None
 
 
 # ---- reviews ----
@@ -309,6 +314,15 @@ class HubOrderOut(ORM):
     hold_expires_at: datetime | None
     decline_reason: str | None
     created_at: datetime
+    kind: str = "slot"
+    ride_stage: str | None = None
+    driver_lat: float | None = None
+    driver_lon: float | None = None
+    driver_location_at: datetime | None = None
+    duration_minutes: int | None = None
+    hub_amount: float | None = None
+    charger_latitude: float | None = None
+    charger_longitude: float | None = None
 
 
 class DeclineIn(BaseModel):
@@ -357,3 +371,60 @@ class DashboardOut(BaseModel):
     review_count: int
     chargers: list[ChargerStatOut]
     daily: list[DailyOut] = []
+
+
+# ---- on-demand rides ----
+class RideCreate(BaseModel):
+    charger_id: int
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    range_km: float | None = Field(default=None, gt=0, le=1000)  # the driver's car range; the hub must be within it
+
+
+class LocationIn(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class DurationIn(BaseModel):
+    minutes: int = Field(gt=0, le=240)
+
+
+class DurationQuoteOut(BaseModel):
+    minutes: int
+    amount: float
+    platform_fee: float
+    hub_amount: float
+
+
+class EventOut(ORM):
+    id: int
+    message: str
+    created_at: datetime
+
+
+class RideOut(ORM):
+    id: int
+    kind: str
+    charger_id: int
+    charger_title: str
+    charger_latitude: float
+    charger_longitude: float
+    status: BookingStatus
+    ride_stage: str | None
+    start_time: datetime
+    end_time: datetime
+    estimated_cost: float
+    platform_fee: float | None
+    hub_amount: float | None
+    duration_minutes: int | None
+    payment_status: str
+    hold_expires_at: datetime | None
+    driver_lat: float | None
+    driver_lon: float | None
+    driver_location_at: datetime | None
+    decline_reason: str | None
+
+
+class RideDetailOut(RideOut):
+    events: list[EventOut] = []

@@ -168,6 +168,18 @@ class Booking(Base):
     status: Mapped[BookingStatus] = mapped_column(Enum(BookingStatus), default=BookingStatus.REQUESTED)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # why it was declined or cancelled by the system
+    # on-demand rides (kind == "ride"): the driver picks a hub now, the charging time is chosen after arrival
+    kind: Mapped[str] = mapped_column(String(10), default="slot")          # "slot" (time chosen up front) or "ride"
+    ride_stage: Mapped[str | None] = mapped_column(String(20), nullable=True)  # EN_ROUTE, ARRIVED, ARRIVAL_CONFIRMED, CHARGING
+    response_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # when the host must answer
+    driver_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    driver_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    driver_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    arrived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    arrival_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    platform_fee: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hub_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_cost: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -184,7 +196,12 @@ class Booking(Base):
     def hold_expires_at(self) -> datetime | None:
         """Deadline of the current stage: the hub's answer while REQUESTED, the driver's payment once CONFIRMED."""
         if self.status == BookingStatus.REQUESTED:
+            if self.response_deadline is not None:
+                return self.response_deadline
             return self.created_at + timedelta(minutes=settings.hub_response_minutes) if settings.hub_response_minutes > 0 else None
+        if (self.kind == "ride" and self.status == BookingStatus.CONFIRMED and self.ride_stage == "ARRIVAL_CONFIRMED"
+                and self.arrival_confirmed_at is not None and settings.unpaid_hold_minutes > 0):
+            return self.arrival_confirmed_at + timedelta(minutes=settings.unpaid_hold_minutes)
         if (self.status != BookingStatus.CONFIRMED or self.estimated_cost <= 0 or settings.unpaid_hold_minutes <= 0
                 or (self.payment and self.payment.status == PaymentStatus.PAID)):
             return None
@@ -212,12 +229,30 @@ class Booking(Base):
         return self.driver.vehicle_number
 
     @property
+    def charger_latitude(self) -> float:
+        return self.charger.latitude
+
+    @property
+    def charger_longitude(self) -> float:
+        return self.charger.longitude
+
+    @property
     def charger_title(self) -> str:
         return self.charger.title
 
     @property
     def reviewed(self) -> bool:
         return self.review is not None
+
+
+class BookingEvent(Base):
+    """A short, timestamped message on a booking's timeline (for example 'Driver reached the hub')."""
+    __tablename__ = "booking_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), index=True)
+    message: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Payment(Base):

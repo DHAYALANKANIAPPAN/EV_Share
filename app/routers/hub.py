@@ -1,3 +1,4 @@
+from ..services.events import log
 import asyncio
 import json
 
@@ -91,6 +92,8 @@ def _own_order(db, booking_id: int, user) -> Booking:
 def _answerable(booking: Booking) -> None:
     if booking.status != BookingStatus.REQUESTED:
         raise HTTPException(status.HTTP_409_CONFLICT, "This request was already answered or has expired.")
+    if booking.response_deadline is not None and booking.response_deadline < utcnow():
+        raise HTTPException(status.HTTP_409_CONFLICT, "The 2-minute window to accept has passed.")
     if booking.end_time <= utcnow():
         raise HTTPException(status.HTTP_409_CONFLICT, "That time slot has already passed.")
 
@@ -106,10 +109,15 @@ def accept_order(booking_id: int, db: DB, user: ApprovedHub):
         if busy >= settings.max_active_hub_bookings:
             raise HTTPException(status.HTTP_409_CONFLICT, "You already have an accepted booking in progress or coming up. Finish or cancel it before accepting another.")
     booking.status, booking.accepted_at = BookingStatus.CONFIRMED, utcnow()
+    if booking.kind == "ride":
+        booking.ride_stage = "EN_ROUTE"
+        log(db, booking, "The host accepted. Head to the hub; your location is shared while you travel.")
     db.commit()
     pay = " Open EV Share > My bookings to pay and get directions." if booking.estimated_cost > 0 else " Open EV Share > My bookings for directions."
+    if booking.kind == "ride":
+        pay = " Head to the hub, then tap I've reached in My bookings."
     notify(booking.driver.email, "Your charging request was accepted",
-           f"'{booking.charger.title}' accepted your request.{pay}" + (f" Please pay within {settings.unpaid_hold_minutes} minutes." if booking.estimated_cost > 0 and settings.unpaid_hold_minutes > 0 else ""))
+           f"'{booking.charger.title}' accepted your request.{pay}" + (f" Please pay within {settings.unpaid_hold_minutes} minutes." if booking.estimated_cost > 0 and settings.unpaid_hold_minutes > 0 and booking.kind == "slot" else ""))
     return booking
 
 
@@ -175,7 +183,8 @@ def dashboard(db: DB, user: ApprovedHub):
         Charger.owner_id == user.id, Booking.status == BookingStatus.COMPLETED)).all()
 
     def earned(b) -> float:
-        return float(b.estimated_cost) if b.payment and b.payment.status == PaymentStatus.PAID else 0.0
+        base = b.hub_amount if b.hub_amount is not None else b.estimated_cost  # the host's share, after commission
+        return float(base) if b.payment and b.payment.status == PaymentStatus.PAID else 0.0
 
     ratings = {cid: (round(float(avg), 2), n) for cid, avg, n in db.execute(
         select(Review.charger_id, func.avg(Review.rating), func.count(Review.id)).join(Charger, Charger.id == Review.charger_id)

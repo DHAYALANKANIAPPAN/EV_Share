@@ -6,13 +6,13 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (register tables)
 from .config import settings
-from .routers import admin, auth, bookings, chargers, hub, payments, reviews, verification
+from .routers import rides,  admin, auth, bookings, chargers, hub, payments, reviews, verification
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 # Schema is managed by Alembic: run `alembic upgrade head` (see README).
 app = FastAPI(title="EV Share", description="Peer-to-peer EV charger sharing.", version="0.4.0")
-for r in (auth, verification, admin, hub, chargers, bookings, reviews, payments):
+for r in (auth, verification, admin, hub, chargers, bookings, reviews, payments, rides):
     app.include_router(r.router)
 
 
@@ -21,7 +21,7 @@ CSP = "; ".join([
     "script-src 'self' https://checkout.razorpay.com",  # Razorpay's checkout script; nothing else from outside
     "style-src 'self' 'unsafe-inline'",                  # Leaflet and the page's helpers set inline styles
     "font-src 'self'",
-    "img-src 'self' data: https://*.tile.openstreetmap.org",  # OpenStreetMap map tiles
+    "img-src 'self' data: https://tile.openstreetmap.org https://*.tile.openstreetmap.org",  # OpenStreetMap map tiles
     "connect-src 'self' https://lumberjack.razorpay.com https://api.razorpay.com",
     "frame-src https://checkout.razorpay.com https://api.razorpay.com",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",

@@ -1,3 +1,5 @@
+from ..services.events import log
+from ..services.money import split
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, status
@@ -57,7 +59,8 @@ def create_booking(body: BookingCreate, db: DB, user: ApprovedDriver):
     # Slot price: charger running at full power for the whole slot (no metering yet).
     cost = round(charger.power_kw * hours * charger.price_per_kwh, 2)
     booking = Booking(charger_id=charger.id, user_id=user.id, start_time=body.start_time, end_time=body.end_time,
-                      estimated_cost=cost, status=BookingStatus.REQUESTED)
+                      estimated_cost=cost, status=BookingStatus.REQUESTED, kind="slot",
+                      platform_fee=split(cost)[0], hub_amount=split(cost)[1])
     db.add(booking)
     db.commit()
     notify(charger.owner.email, "New charging request on EV Share",
@@ -115,5 +118,8 @@ def finish_session(booking_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This booking hasn't been paid yet.")
     booking.status = BookingStatus.COMPLETED
     booking.end_time = min(booking.end_time, now)  # frees whatever was left of the slot
+    if booking.kind == "ride":
+        booking.ride_stage = "CHARGING"
+        log(db, booking, f"Charging finished. Rs {booking.hub_amount:.0f} to the host, Rs {booking.platform_fee:.0f} platform fee.")
     db.commit()
     return booking

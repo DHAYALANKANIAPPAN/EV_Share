@@ -11,7 +11,7 @@ def test_dashboard_counts_completed_sessions_earnings_and_ratings(client):
     host = register_and_login(client)
     cid = client.post("/chargers", json=CHARGER, headers=host).json()["id"]
     driver = register_and_login(client, "b@example.com", "Bala")
-    bid = paid_booking(client, host, driver, cid)  # 7.4 kW x 1 h x Rs10 = Rs74
+    bid = paid_booking(client, host, driver, cid)  # 7.4 kW x 1 h x Rs10 = Rs74; the host keeps 80% = Rs59.20
     d0 = client.get("/hub/dashboard", headers=host).json()
     assert d0["sessions_total"] == 0 and d0["earnings_total"] == 0 and d0["chargers"][0]["title"] == CHARGER["title"]
 
@@ -19,7 +19,7 @@ def test_dashboard_counts_completed_sessions_earnings_and_ratings(client):
     client.post(f"/bookings/{bid}/finish", headers=driver)
     client.post("/reviews", json={"booking_id": bid, "rating": 4, "comment": "Good"}, headers=driver)
     d = client.get("/hub/dashboard", headers=host).json()
-    assert d["sessions_total"] == 1 and d["sessions_30d"] == 1 and d["earnings_total"] == 74.0 and d["earnings_30d"] == 74.0
+    assert d["sessions_total"] == 1 and d["sessions_30d"] == 1 and d["earnings_total"] == 59.2 and d["earnings_30d"] == 59.2
     assert d["avg_rating"] == 4.0 and d["review_count"] == 1
     assert d["chargers"][0]["sessions"] == 1 and d["chargers"][0]["avg_rating"] == 4.0
 
@@ -36,7 +36,7 @@ def test_dashboard_separates_last_30_days(client):
         b.end_time = utcnow() - timedelta(days=45)
         db.commit()
     d = client.get("/hub/dashboard", headers=host).json()
-    assert d["sessions_total"] == 1 and d["sessions_30d"] == 0 and d["earnings_total"] == 74.0 and d["earnings_30d"] == 0
+    assert d["sessions_total"] == 1 and d["sessions_30d"] == 0 and d["earnings_total"] == 59.2 and d["earnings_30d"] == 0
 
 
 def test_dashboard_is_for_approved_hubs_only(client):
@@ -79,6 +79,6 @@ def test_dashboard_has_14_days_that_add_up(client):
     d = client.get("/hub/dashboard", headers=host).json()
     assert len(d["daily"]) == 14
     assert sum(x["sessions"] for x in d["daily"]) == d["sessions_30d"] == 1
-    assert round(sum(x["earnings"] for x in d["daily"]), 2) == d["earnings_30d"] == 74.0
+    assert round(sum(x["earnings"] for x in d["daily"]), 2) == d["earnings_30d"] == 59.2
     days = [x["day"] for x in d["daily"]]
     assert days == sorted(days)
