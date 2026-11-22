@@ -418,7 +418,7 @@ function dashboardView() {
   const head = h("div", { className: "flex flex-wrap items-end justify-between gap-4" },
     h("div", { className: "grid gap-1" }, h("p", { className: "dash-kicker", textContent: "Hub overview" }),
       h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Dashboard" }),
-      h("p", { className: "text-mute text-sm max-w-[60ch]", textContent: "Earnings are gross estimates before any commission. Payouts are not paid out yet." })),
+      h("p", { className: "text-mute text-sm max-w-[60ch]", textContent: S.dash ? `Earnings after the platform's 20% commission. Pending payout ${money(S.dash.pending_payout)} · Paid ${money(S.dash.paid_out)}.` : "Earnings after the platform's 20% commission." })),
     h("span", { className: "chip mono", textContent: "Last 30 days" }));
   if (S.loading || !S.dash) return h("div", { className: "grid gap-6" }, head, skeleton());
   const d = S.dash;

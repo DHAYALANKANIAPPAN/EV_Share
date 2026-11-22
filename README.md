@@ -163,7 +163,7 @@ A driver picks a live hub within their car's range and asks it to take them now:
 4. **Time and pay.** The driver chooses the charging time (30 minutes for ₹100 for now). Payment starts the charging.
 5. **Commission.** For every ₹100 paid, the platform keeps ₹20 and the host receives ₹80. The Dashboard shows the host's share.
 
-Settings: `EVSHARE_RIDE_PRICE_RS`, `EVSHARE_RIDE_SLOT_MINUTES`, `EVSHARE_PLATFORM_COMMISSION_PERCENT`, `EVSHARE_RIDE_RESPONSE_MINUTES`, `EVSHARE_RIDE_ARRIVAL_RADIUS_M`. Payouts to hosts are not automatic yet; they are recorded for Razorpay Route once accounts are verified.
+Settings: `EVSHARE_RIDE_PRICE_RS`, `EVSHARE_RIDE_SLOT_MINUTES`, `EVSHARE_PLATFORM_COMMISSION_PERCENT`, `EVSHARE_RIDE_RESPONSE_MINUTES`, `EVSHARE_RIDE_ARRIVAL_RADIUS_M`. Each finished, paid session creates a payout for the host. An admin marks it paid with the transfer reference (`POST /payouts/{id}/mark-paid`). The host sees pending and paid totals on the Dashboard. Automatic transfers come later with Razorpay Route, once accounts are verified.
 
 ## Usage rules (one at a time)
 
