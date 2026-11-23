@@ -27,8 +27,11 @@ def upgrade() -> None:
         b.add_column(sa.Column('platform_fee', sa.Float(), nullable=True))
         b.add_column(sa.Column('hub_amount', sa.Float(), nullable=True))
     # existing bookings: the 20% commission applies to them too
-    op.execute("UPDATE bookings SET platform_fee = ROUND(estimated_cost * 0.2, 2), "
-               "hub_amount = estimated_cost - ROUND(estimated_cost * 0.2, 2) WHERE hub_amount IS NULL")
+    # CAST to NUMERIC makes ROUND work on Postgres as well as SQLite
+    op.execute("UPDATE bookings SET "
+               "platform_fee = CAST(ROUND(CAST(estimated_cost * 0.2 AS NUMERIC), 2) AS DOUBLE PRECISION), "
+               "hub_amount = estimated_cost - CAST(ROUND(CAST(estimated_cost * 0.2 AS NUMERIC), 2) AS DOUBLE PRECISION) "
+               "WHERE hub_amount IS NULL")
     op.create_table(
         'booking_events',
         sa.Column('id', sa.Integer(), primary_key=True),

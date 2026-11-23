@@ -1,5 +1,7 @@
 # EV Share: handoff document
 
+> **Status update (rides and payouts):** drivers book on demand: request a live hub in range, the host has 2 minutes to accept, the driver shares location on the way, taps "I've reached the hub" near the hub, the host confirms, the driver chooses charging time (30 min for Rs 100 for now) and pays. Each paid session records the commission (20% platform, 80% host) and creates a payout. Admins mark payouts paid in the reviewer portal. Migrations 0008 (rides) and 0009 (payouts) were checked on SQLite and Postgres, including backfilling existing bookings. Still open: Razorpay live payments, automatic host transfers (Razorpay Route), the real-device check, and the mapcn.dev decision.
+
 > **Status update (latest):** the remaining product items are done: the hub Dashboard (sessions, earnings, ratings), live order updates (`/hub/stream`), and the front-end libraries are in the project (no CDNs). Jenkins is the only pipeline. Still not built: metered billing, host payouts, email verification for sign-up beyond the codes, and a real-browser check. Those need your decisions or accounts.
 
 ## 1. What the product is

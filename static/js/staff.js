@@ -27,27 +27,27 @@ const tabs = () => h("div", { className: "flex gap-1 border-b border-line", role
 async function load() { S.loading = true; render(); try { S.queue = await api.adminQueue(); } finally { S.loading = false; render(); } }
 
 async function loadPayouts() { S.loading = true; render(); try { S.payouts = await api.payoutQueue(); } catch (e) { toast(e.message, true); } finally { S.loading = false; render(); } }
-const money = (n) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const rupees = (n) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 function payoutsView() {
   const pending = S.payouts.filter((p) => p.status === "PENDING");
   const owed = pending.reduce((t, p) => t + p.amount, 0);
   const head = h("div", { className: "flex flex-wrap items-end justify-between gap-4" },
     h("div", { className: "grid gap-1" }, h("h1", { className: "text-2xl font-semibold tracking-tight", textContent: "Host payouts" }),
-      h("p", { className: "text-mute text-sm", textContent: `${pending.length} to pay, ${money(owed)} in total. Transfer each one by bank, then enter the transfer reference here.` })));
+      h("p", { className: "text-mute text-sm", textContent: `${pending.length} to pay, ${rupees(owed)} in total. Transfer each one by bank, then enter the transfer reference here.` })));
   if (!S.payouts.length) return h("div", { className: "grid gap-6" }, head, h("p", { className: "panel p-6 text-sm text-mute", textContent: S.loading ? "Loading…" : "No payouts yet. A payout appears when a paid session is finished." }));
   return h("div", { className: "grid gap-6" }, head, h("ul", { className: "panel overflow-hidden" }, S.payouts.map((p) => h("li", { className: "row" },
     h("div", { className: "grid gap-1 min-w-0" }, h("div", { className: "flex items-center gap-2 flex-wrap" }, h("h3", { className: "font-medium", textContent: p.hub_name }), pill(p.status === "PAID" ? "Paid" : "Pending", p.status === "PAID" ? "ok" : "")),
       h("p", { className: "text-sm text-mute", textContent: `${p.charger_title} · booking #${p.booking_id}` }),
       p.reference ? h("p", { className: "text-xs mono text-mute", textContent: `Reference ${p.reference}` }) : null),
-    h("div", { className: "flex items-center gap-3" }, h("p", { className: "mono font-semibold", textContent: money(p.amount) }),
+    h("div", { className: "flex items-center gap-3" }, h("p", { className: "mono font-semibold", textContent: rupees(p.amount) }),
       p.status === "PENDING" ? h("button", { className: "btn btn-primary", textContent: "Mark paid", onclick: () => askReference(p) }) : null)))));
 }
 function askReference(p) {
   const d = $("#dlg"), opener = document.activeElement, ref = h("input", { id: "pay-ref", maxLength: 120, required: true, minLength: 3, placeholder: "e.g. NEFT or UTR number" });
   d.onclose = () => opener && opener.focus && opener.focus();
   d.replaceChildren(h("form", { className: "grid gap-4", onsubmit: guard(async (e) => {
-      e.preventDefault(); await api.markPaid(p.id, ref.value.trim()); d.close(); toast(`Marked ${money(p.amount)} paid to ${p.hub_name}`); await loadPayouts(); }) },
-    h("h2", { className: "font-semibold text-lg", textContent: `Mark ${money(p.amount)} paid to ${p.hub_name}?` }),
+      e.preventDefault(); await api.markPaid(p.id, ref.value.trim()); d.close(); toast(`Marked ${rupees(p.amount)} paid to ${p.hub_name}`); await loadPayouts(); }) },
+    h("h2", { className: "font-semibold text-lg", textContent: `Mark ${rupees(p.amount)} paid to ${p.hub_name}?` }),
     h("p", { className: "text-sm text-mute", textContent: "Only mark it paid after the bank transfer has gone through. The reference is kept with the payout." }),
     h("div", { className: "field" }, h("label", { htmlFor: "pay-ref", textContent: "Transfer reference" }), ref),
     h("div", { className: "flex justify-end gap-2" }, h("button", { className: "btn", type: "button", textContent: "Not yet", onclick: () => d.close() }), h("button", { className: "btn btn-primary", type: "submit", textContent: "Mark paid" }))));

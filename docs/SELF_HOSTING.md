@@ -56,6 +56,14 @@ ev.example.com {
 ```
 gets you automatic HTTPS. Browsers only share the location needed by *Go live* over HTTPS.
 
+## Payouts (hosts)
+
+Each finished, paid session creates a payout for the host (80% of the amount, after the 20% commission). To pay a host:
+1. Make your account a reviewer-admin if you haven't: `docker compose -f docker-compose.prod.yml exec app python -m scripts.make_admin`.
+2. Open your reviewer portal, go to **Payouts**, transfer the amount by bank, and tap **Mark paid** with the transfer reference.
+
+Automatic transfers come later with Razorpay Route, once hosts have verified bank accounts.
+
 ## 6. Routine jobs
 ```bash
 # daily: delete identity documents past their retention period
