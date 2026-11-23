@@ -371,6 +371,8 @@ class DashboardOut(BaseModel):
     review_count: int
     chargers: list[ChargerStatOut]
     daily: list[DailyOut] = []
+    pending_payout: float = 0.0
+    paid_out: float = 0.0
 
 
 # ---- on-demand rides ----

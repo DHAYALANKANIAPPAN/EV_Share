@@ -255,6 +255,21 @@ class BookingEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class Payout(Base):
+    """What the platform owes a host for one finished, paid session (the host's share after commission).
+    Status is PENDING until an admin marks it PAID with the transfer reference (manual until Razorpay Route is live)."""
+    __tablename__ = "payouts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hub_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), unique=True)
+    amount: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(10), default="PENDING")
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Payment(Base):
     __tablename__ = "payments"
 

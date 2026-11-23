@@ -1,3 +1,4 @@
+from ..models import Payout
 from ..services.events import log
 from ..services.money import split
 from datetime import timedelta
@@ -118,6 +119,8 @@ def finish_session(booking_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This booking hasn't been paid yet.")
     booking.status = BookingStatus.COMPLETED
     booking.end_time = min(booking.end_time, now)  # frees whatever was left of the slot
+    db.add(Payout(hub_user_id=booking.charger.owner_id, booking_id=booking.id,
+                  amount=booking.hub_amount if booking.hub_amount is not None else booking.estimated_cost))
     if booking.kind == "ride":
         booking.ride_stage = "CHARGING"
         log(db, booking, f"Charging finished. Rs {booking.hub_amount:.0f} to the host, Rs {booking.platform_fee:.0f} platform fee.")

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from ..config import settings
 from ..deps import DB, ApprovedDriver, ApprovedHub, CurrentUser
 from ..models import Booking, BookingEvent, BookingStatus, Charger, utcnow
-from ..schemas import DurationIn, DurationQuoteOut, LocationIn, RideCreate, RideDetailOut, RideOut
+from ..schemas import DurationIn, DurationQuoteOut, EventOut, LocationIn, RideCreate, RideDetailOut, RideOut
 from ..services.availability import fits_window, window_label
 from ..services.events import log
 from ..services.expiry import expire_unpaid
@@ -85,7 +85,7 @@ def get_ride(ride_id: int, db: DB, user: CurrentUser):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your ride")
     detail = RideDetailOut.model_validate(booking)
     events = db.scalars(select(BookingEvent).where(BookingEvent.booking_id == booking.id).order_by(BookingEvent.id)).all()
-    detail.events = [{"id": e.id, "message": e.message, "created_at": e.created_at} for e in events]
+    detail.events = [EventOut.model_validate(e) for e in events]
     return detail
 
 

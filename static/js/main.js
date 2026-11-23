@@ -306,7 +306,7 @@ function rideRow(b) {
         await api.finish(b.id); toast("Session ended. Thanks for charging!"); await loadBookings(); }) }));
   } else if (st === "COMPLETED") {
     [title, tone] = ["Completed", ""];
-    body = h("p", { className: "text-sm text-mute", textContent: "Thank you for charging. Details are in the timeline below." });
+    body = h("p", { className: "text-sm text-mute", textContent: `Paid ₹${b.estimated_cost}: ₹${(b.estimated_cost * 0.8).toFixed(0)} to the host and ₹${(b.estimated_cost * 0.2).toFixed(0)} platform fee. Thank you for charging.` });
   } else {
     [title, tone] = [st === "CANCELLED" ? "Cancelled" : "Declined", "danger"];
     body = h("p", { className: "text-sm text-danger", textContent: b.decline_reason || "This ride ended without a charge." });
@@ -418,7 +418,7 @@ function dashboardView() {
   const head = h("div", { className: "flex flex-wrap items-end justify-between gap-4" },
     h("div", { className: "grid gap-1" }, h("p", { className: "dash-kicker", textContent: "Hub overview" }),
       h("h1", { className: "text-3xl font-semibold tracking-tight", textContent: "Dashboard" }),
-      h("p", { className: "text-mute text-sm max-w-[60ch]", textContent: "Earnings are gross estimates before any commission. Payouts are not paid out yet." })),
+      h("p", { className: "text-mute text-sm max-w-[60ch]", textContent: S.dash ? `Earnings after the platform's 20% commission. Pending payout ${money(S.dash.pending_payout)} · Paid ${money(S.dash.paid_out)}.` : "Earnings after the platform's 20% commission." })),
     h("span", { className: "chip mono", textContent: "Last 30 days" }));
   if (S.loading || !S.dash) return h("div", { className: "grid gap-6" }, head, skeleton());
   const d = S.dash;

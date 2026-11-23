@@ -1,3 +1,4 @@
+from ..services.payouts import payout_total
 from ..services.events import log
 import asyncio
 import json
@@ -207,6 +208,7 @@ def dashboard(db: DB, user: ApprovedHub):
         sessions_total=len(done), sessions_30d=len(recent),
         earnings_total=round(sum(earned(b) for b in done), 2), earnings_30d=round(sum(earned(b) for b in recent), 2),
         avg_rating=overall, review_count=total_reviews, daily=daily,
+        pending_payout=payout_total(db, user.id, "PENDING"), paid_out=payout_total(db, user.id, "PAID"),
         chargers=[ChargerStatOut(charger_id=c.id, title=c.title, sessions=per[c.id]["sessions"],
                                  earnings=round(per[c.id]["earnings"], 2), avg_rating=ratings.get(c.id, (None, 0))[0],
                                  review_count=ratings.get(c.id, (None, 0))[1]) for c in chargers],
